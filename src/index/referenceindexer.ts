@@ -188,26 +188,53 @@ export class ReferenceIndexer {
         // });
 
         let affectedFiles = this.index.getDirReferences(from);
-        let promises = affectedFiles.map(reference => {
-            return vscode.workspace.openTextDocument(reference.path).then((doc:vscode.TextDocument) => {
-                let imports = this.getRelativeReferences(doc.getText());
-                let change = imports.filter(p => {
-                    let abs = path.resolve(path.dirname(reference.path), p);
-                    return !path.relative(from, abs).startsWith('../')
-                }).map((p):[string,string] => {
-                    let abs = path.resolve(path.dirname(reference.path), p);
-                    let relative = path.relative(from, abs);
-                    let newabs = path.resolve(to,relative);
-                    let changeTo = path.relative(path.dirname(reference.path), newabs);
-                    if(!changeTo.startsWith('.')) {
-                        changeTo = './' + changeTo;
-                    }
-                    return [p,changeTo];
+
+        let index = 0;
+        let next = ():Thenable<any> => {
+            if(index < affectedFiles.length) {
+                let reference = affectedFiles[index++];
+                return vscode.workspace.openTextDocument(reference.path).then((doc:vscode.TextDocument) => {
+                    let imports = this.getRelativeReferences(doc.getText());
+                    let change = imports.filter(p => {
+                        let abs = path.resolve(path.dirname(reference.path), p);
+                        return !path.relative(from, abs).startsWith('../')
+                    }).map((p): [string, string] => {
+                        let abs = path.resolve(path.dirname(reference.path), p);
+                        let relative = path.relative(from, abs);
+                        let newabs = path.resolve(to, relative);
+                        let changeTo = path.relative(path.dirname(reference.path), newabs);
+                        if (!changeTo.startsWith('.')) {
+                            changeTo = './' + changeTo;
+                        }
+                        return [p, changeTo];
+                    });
+                    return this.replaceReferences(doc, change).then(next);
                 });
-                this.replaceReferences(doc, change);
-            });
-        });
-        return Promise.all(promises);
+            } else {
+                return Promise.resolve();
+            }
+        }
+        return next();
+        // let promises = affectedFiles.map(reference => {
+        //     return vscode.workspace.openTextDocument(reference.path).then((doc:vscode.TextDocument) => {
+        //         let imports = this.getRelativeReferences(doc.getText());
+        //         let change = imports.filter(p => {
+        //             let abs = path.resolve(path.dirname(reference.path), p);
+        //             return !path.relative(from, abs).startsWith('../')
+        //         }).map((p):[string,string] => {
+        //             let abs = path.resolve(path.dirname(reference.path), p);
+        //             let relative = path.relative(from, abs);
+        //             let newabs = path.resolve(to,relative);
+        //             let changeTo = path.relative(path.dirname(reference.path), newabs);
+        //             if(!changeTo.startsWith('.')) {
+        //                 changeTo = './' + changeTo;
+        //             }
+        //             return [p,changeTo];
+        //         });
+        //         this.replaceReferences(doc, change);
+        //     });
+        // });
+        // return Promise.all(promises);
     }
 
     public updateImports(from:string, to:string):Promise<any> {
