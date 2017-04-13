@@ -1,0 +1,47 @@
+{
+    "name": "move-ts",
+    "displayName": "move-ts",
+    "description": "update import statements when moving ts files",
+    "version": "0.0.1",
+    "publisher": "stringham",
+    "engines": {
+        "vscode": "^1.10.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+        "onCommand:move-ts.move"
+    ],
+    "main": "./out/src/extension",
+    "contributes": {
+        "menus":{
+            "explorer/context":[{
+                "command":"move-ts.move",
+                "group": "1_modification",
+                "when": "explorerViewletVisible"
+            }]
+        },
+        "commands": [{
+            "command": "move-ts.move",
+            "title": "Move Typescript"
+        }]
+    },
+    "scripts": {
+        "vscode:prepublish": "tsc -p ./",
+        "compile": "tsc -watch -p ./",
+        "postinstall": "node ./node_modules/vscode/bin/install",
+        "test": "node ./node_modules/vscode/bin/test"
+    },
+    "dependencies": {
+        "fs-extra-promise": "1.0.1",
+        "@types/fs-extra-promise": "0.0.31"
+    },
+    "devDependencies": {
+        "typescript": "^2.0.3",
+        "vscode": "^1.0.0",
+        "mocha": "^2.3.3",
+        "@types/node": "^6.0.40",
+        "@types/mocha": "^2.2.32"
+    }
+}
