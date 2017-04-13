@@ -68,6 +68,7 @@ export class ReferenceIndexer {
         this.output.clear();
         this.output.appendLine('Files changed:');
     }
+
     private scanAll(reportProgress:boolean) {
         this.index = new ReferenceIndex();
         return vscode.workspace.findFiles(this.filesToScan[0],'**/node_modules/**',100000)
@@ -114,45 +115,91 @@ export class ReferenceIndexer {
         })
     }
 
-
-    private replaceReferences(path:string, getReplacements:(text:string) => Replacement[]):Thenable<any> {
+    private getEdits(text:string, replacements:Replacement[]):Edit[] {
         function escapeRegExp(str:string) {
-            return str.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&");
+            return String(str)
+                .replace(/([-()\[\]{}+?*.$\^|,:#<!\\])/g, '\\$1')
+                .replace(/\x08/g, '\\x08');
         }
-        return vscode.workspace.openTextDocument(path).then((doc:vscode.TextDocument):Thenable<any> => {
-            let replacements = getReplacements(doc.getText());
-            let edits: vscode.TextEdit[] = [];
-            replacements.forEach(replacement => {
-                let before = replacement[0];
-                let after = replacement[1];
-                if(before == after) {
-                    return;
-                }
+        let edits: Edit[] = [];
+        replacements.forEach(replacement => {
+            let before = replacement[0];
+            let after = replacement[1];
+            if (before == after) {
+                return;
+            }
 
-                let regExp = new RegExp(`(import\\s+({[^}]*})?(\\S+)?(\\S+\\s+as\\s+\\S+)?\\s+from ['"])(${escapeRegExp(before)}(\\.ts)?)(['"];?)`, 'g');
+            let regExp = new RegExp(`(import\\s+({[^}]*})?(\\S+)?(\\S+\\s+as\\s+\\S+)?\\s+from ['"])(${escapeRegExp(before)}(\\.ts)?)(['"];?)`, 'g');
 
-                let match: RegExpExecArray | null;
-                let text = doc.getText();
-                while (match = regExp.exec(text)) {
-                    let importLine = text.substring(match.index, regExp.lastIndex);
-                    if (before != after) {
-                        let start = importLine.indexOf(before);
-                        if (importLine.indexOf(before, start + before.length) > 0) {
-                            continue;
-                        }
-                        let edit = vscode.TextEdit.replace(new vscode.Range(doc.positionAt(match.index + start), doc.positionAt(match.index + start + before.length)), after);
-                        edits.push(edit);
-                    }
+            let match: RegExpExecArray | null;
+            while (match = regExp.exec(text)) {
+                let importLine = text.substring(match.index, regExp.lastIndex);
+                let start = importLine.indexOf(before);
+                if (importLine.indexOf(before, start + before.length) > 0) { //some weird double import maybe?
+                    continue;
                 }
-            })
-            if (edits.length > 0) {
-                let edit = new vscode.WorkspaceEdit();
-                edit.set(doc.uri, edits);
-                return vscode.workspace.applyEdit(edit);
-            } else {
-                return Promise.resolve();
+                let edit = {
+                    start:match.index + start,
+                    end:match.index + start + before.length,
+                    replacement:after,
+                }
+                edits.push(edit);
             }
         })
+
+        return edits;
+    }
+
+    private applyEdits(text:string, edits:Edit[]):string {
+        let replaceBetween = (str:string, start:number, end:number, replacement:string):string => {
+            return str.substr(0,start) + replacement + str.substr(end);
+        }
+
+        edits.sort((a,b) => {
+            return a.start - b.start;
+        });
+
+        let editOffset = 0;
+        for(let i=0; i<edits.length; i++) {
+            let edit = edits[i];
+            text = replaceBetween(text, edit.start + editOffset, edit.end + editOffset, edit.replacement);
+            editOffset += edit.replacement.length - (edit.end-edit.start)
+        }
+        return text
+    }
+
+
+    private replaceReferences(path:string, getReplacements:(text:string) => Replacement[]):Thenable<any> {
+        return fs.readFileAsync(path, 'utf8').then(text => {
+            let replacements = getReplacements(text);
+            let edits = this.getEdits(text, replacements);
+            if(edits.length == 0) {
+                return Promise.resolve();
+            }
+
+            let newText = this.applyEdits(text, edits);
+
+            this.output.show();
+            this.output.appendLine(path);
+
+            return fs.writeFileAsync(path, newText, 'utf-8');
+        });
+
+        // return vscode.workspace.openTextDocument(path).then((doc:vscode.TextDocument):Thenable<any> => {
+        //     let text = doc.getText();
+        //     let replacements = getReplacements(text);
+
+        //     let edits = this.getEdits(text, replacements).map((edit:Edit) => {
+        //         return vscode.TextEdit.replace(new vscode.Range(doc.positionAt(edit.start), doc.positionAt(edit.end)), edit.replacement);
+        //     });
+        //     if (edits.length > 0) {
+        //         let edit = new vscode.WorkspaceEdit();
+        //         edit.set(doc.uri, edits);
+        //         return vscode.workspace.applyEdit(edit);
+        //     } else {
+        //         return Promise.resolve();
+        //     }
+        // })
     }
 
     public updateMovedFile(from:string, to:string):Thenable<any> {
