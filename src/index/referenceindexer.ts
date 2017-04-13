@@ -5,6 +5,8 @@ import * as path from 'path';
 
 const BATCH_SIZE = 50;
 
+type Replacement = [string,string];
+
 
 export class ReferenceIndexer {
     public index:ReferenceIndex = new ReferenceIndex();
@@ -71,46 +73,49 @@ export class ReferenceIndexer {
     }
 
 
-    private replaceReferences(doc:vscode.TextDocument, replacements:[string,string][]):Thenable<any> {
+    private replaceReferences(path:string, getReplacements:(text:string) => Replacement[]):Thenable<any> {
         function escapeRegExp(str:string) {
             return str.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&");
         }
-        let edits: vscode.TextEdit[] = [];
-        replacements.forEach(replacement => {
-            let before = replacement[0];
-            let after = replacement[1];
-            if(before == after) {
-                return;
-            }
-
-            let regExp = new RegExp(`(import\\s+({[^}]*})?(\\S+)?(\\S+\\s+as\\s+\\S+)?\\s+from ['"])(${escapeRegExp(before)}(\\.ts)?)(['"];?)`, 'g');
-
-            let match: RegExpExecArray | null;
-            let text = doc.getText();
-            while (match = regExp.exec(text)) {
-                let importLine = text.substring(match.index, regExp.lastIndex);
-                if (before != after) {
-                    let start = importLine.indexOf(before);
-                    if (importLine.indexOf(before, start + before.length) > 0) {
-                        continue;
-                    }
-                    let edit = vscode.TextEdit.replace(new vscode.Range(doc.positionAt(match.index + start), doc.positionAt(match.index + start + before.length)), after);
-                    edits.push(edit);
+        return vscode.workspace.openTextDocument(path).then((doc:vscode.TextDocument):Thenable<any> => {
+            let replacements = getReplacements(doc.getText());
+            let edits: vscode.TextEdit[] = [];
+            replacements.forEach(replacement => {
+                let before = replacement[0];
+                let after = replacement[1];
+                if(before == after) {
+                    return;
                 }
+
+                let regExp = new RegExp(`(import\\s+({[^}]*})?(\\S+)?(\\S+\\s+as\\s+\\S+)?\\s+from ['"])(${escapeRegExp(before)}(\\.ts)?)(['"];?)`, 'g');
+
+                let match: RegExpExecArray | null;
+                let text = doc.getText();
+                while (match = regExp.exec(text)) {
+                    let importLine = text.substring(match.index, regExp.lastIndex);
+                    if (before != after) {
+                        let start = importLine.indexOf(before);
+                        if (importLine.indexOf(before, start + before.length) > 0) {
+                            continue;
+                        }
+                        let edit = vscode.TextEdit.replace(new vscode.Range(doc.positionAt(match.index + start), doc.positionAt(match.index + start + before.length)), after);
+                        edits.push(edit);
+                    }
+                }
+            })
+            if (edits.length > 0) {
+                let edit = new vscode.WorkspaceEdit();
+                edit.set(doc.uri, edits);
+                return vscode.workspace.applyEdit(edit);
+            } else {
+                return Promise.resolve();
             }
         })
-        if (edits.length > 0) {
-            let edit = new vscode.WorkspaceEdit();
-            edit.set(doc.uri, edits);
-            return vscode.workspace.applyEdit(edit);
-        } else {
-            return Promise.resolve();
-        }
     }
 
     public updateMovedFile(from:string, to:string):Thenable<any> {
-        return vscode.workspace.openTextDocument(to).then((doc:vscode.TextDocument) => {
-            let references = this.getRelativeReferences(doc.getText());
+        return this.replaceReferences(to, (text:string):Replacement[] => {
+            let references = this.getRelativeReferences(text);
 
             let replacements = references.map((reference):[string, string] => {
                 let absReference = path.resolve(path.dirname(from), reference);
@@ -120,8 +125,7 @@ export class ReferenceIndexer {
                 }
                 return [reference, newReference]
             });
-
-            return this.replaceReferences(doc, replacements);
+            return replacements;
         })
     }
 
@@ -131,8 +135,8 @@ export class ReferenceIndexer {
             console.log(files);
             let promises = files.map(file => {
                 let originalPath = path.resolve(from, path.relative(to,file.fsPath));
-                return vscode.workspace.openTextDocument(file.fsPath).then((doc:vscode.TextDocument) => {
-                    let references = this.getRelativeReferences(doc.getText());
+                return this.replaceReferences(file.fsPath, (text:string):Replacement[] => {
+                    let references = this.getRelativeReferences(text);
                     let change = references.filter(p => {
                         let abs = path.resolve(path.dirname(originalPath), p);
                         return path.relative(from, abs).startsWith('../');
@@ -144,105 +148,44 @@ export class ReferenceIndexer {
                         }
                         return [p, relative];
                     });
-                    console.log(file.fsPath);
-                    console.log(change);
-                    this.replaceReferences(doc,change);
+                    return change;
                 })
             });
             return Promise.all(promises);
         })
     }
 
-    // import {a} from '../whatev';
-    // import {a} from '../../whatev';
-
     public updateDirImports(from:string, to:string):Thenable<any> {
-        // let relative = path.relative(vscode.workspace.rootPath || '/', from);
-        // return vscode.workspace.findFiles(relative + '/**/*.ts', undefined, 100000).then(files => {
-        //     console.log(files);
-
-        //     let allReferences:{[key:string]:[string,string][]} = {}
-
-        //     let filesWithReferences = files.forEach(file => {
-        //         let references = this.index.getReferences(file.fsPath).filter(reference => {
-        //             return path.relative(from, reference.path).startsWith('../');
-        //         });
-        //         references.forEach(reference => {
-        //             let before = path.relative(path.dirname(reference.path), file.fsPath);
-        //             let after = path.relative(path.dirname(reference.path), path.resolve(to, path.relative(from, file.fsPath)));
-        //             if(!after.startsWith('.')) {
-        //                 after = './' + after;
-        //             }
-        //             if(!allReferences.hasOwnProperty(reference.path)) {
-        //                 allReferences[reference.path] = []
-        //             }
-        //             allReferences[reference.path].push([before, after]);
-        //         })
-        //     });
-
-        //     for(let reference in allReferences) {
-        //         vscode.workspace.openTextDocument(reference).then((doc:vscode.TextDocument) => {
-        //             return this.replaceReferences(doc, allReferences[reference])
-        //         });
-        //     }
-        // });
 
         let affectedFiles = this.index.getDirReferences(from);
 
-        let index = 0;
-        let next = ():Thenable<any> => {
-            if(index < affectedFiles.length) {
-                let reference = affectedFiles[index++];
-                return vscode.workspace.openTextDocument(reference.path).then((doc:vscode.TextDocument) => {
-                    let imports = this.getRelativeReferences(doc.getText());
-                    let change = imports.filter(p => {
-                        let abs = path.resolve(path.dirname(reference.path), p);
-                        return !path.relative(from, abs).startsWith('../')
-                    }).map((p): [string, string] => {
-                        let abs = path.resolve(path.dirname(reference.path), p);
-                        let relative = path.relative(from, abs);
-                        let newabs = path.resolve(to, relative);
-                        let changeTo = path.relative(path.dirname(reference.path), newabs);
-                        if (!changeTo.startsWith('.')) {
-                            changeTo = './' + changeTo;
-                        }
-                        return [p, changeTo];
-                    });
-                    return this.replaceReferences(doc, change).then(next);
+        let promises = affectedFiles.map(reference => {
+            return this.replaceReferences(reference.path, (text:string):Replacement[] => {
+                let imports = this.getRelativeReferences(text);
+                let change = imports.filter(p => {
+                    let abs = path.resolve(path.dirname(reference.path), p);
+                    return !path.relative(from, abs).startsWith('../')
+                }).map((p):[string,string] => {
+                    let abs = path.resolve(path.dirname(reference.path), p);
+                    let relative = path.relative(from, abs);
+                    let newabs = path.resolve(to,relative);
+                    let changeTo = path.relative(path.dirname(reference.path), newabs);
+                    if(!changeTo.startsWith('.')) {
+                        changeTo = './' + changeTo;
+                    }
+                    return [p,changeTo];
                 });
-            } else {
-                return Promise.resolve();
-            }
-        }
-        return next();
-        // let promises = affectedFiles.map(reference => {
-        //     return vscode.workspace.openTextDocument(reference.path).then((doc:vscode.TextDocument) => {
-        //         let imports = this.getRelativeReferences(doc.getText());
-        //         let change = imports.filter(p => {
-        //             let abs = path.resolve(path.dirname(reference.path), p);
-        //             return !path.relative(from, abs).startsWith('../')
-        //         }).map((p):[string,string] => {
-        //             let abs = path.resolve(path.dirname(reference.path), p);
-        //             let relative = path.relative(from, abs);
-        //             let newabs = path.resolve(to,relative);
-        //             let changeTo = path.relative(path.dirname(reference.path), newabs);
-        //             if(!changeTo.startsWith('.')) {
-        //                 changeTo = './' + changeTo;
-        //             }
-        //             return [p,changeTo];
-        //         });
-        //         this.replaceReferences(doc, change);
-        //     });
-        // });
-        // return Promise.all(promises);
+                return change;
+            });
+        });
+        return Promise.all(promises);
     }
 
     public updateImports(from:string, to:string):Promise<any> {
 
         let affectedFiles = this.index.getReferences(from);
-        console.log(affectedFiles);
         let promises = affectedFiles.map(filePath => {
-            return vscode.workspace.openTextDocument(filePath.path).then((doc:vscode.TextDocument) => {
+            return this.replaceReferences(filePath.path, (text:string):Replacement[] => {
                 let relative = path.relative(path.dirname(filePath.path), from);
                 if(relative.endsWith('.ts')) {
                     relative = relative.substr(0,relative.length-3);
@@ -259,7 +202,7 @@ export class ReferenceIndexer {
                     newRelative = './' + newRelative;
                 }
 
-                this.replaceReferences(doc, [[relative, newRelative]])
+                return [[relative, newRelative]]
             })
         })
         return Promise.all(promises).catch(e => {
