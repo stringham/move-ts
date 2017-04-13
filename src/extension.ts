@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import {FileItem} from './fileitem';
-import {ReferenceIndexer} from './index/referenceindexer';
+import {ReferenceIndexer, isInDir} from './index/referenceindexer';
 
 function warnThenMove(importer:ReferenceIndexer, item:FileItem):Thenable<any> {
     return vscode.window.showWarningMessage('This will save all open editors and all changes will immediately be saved. Do you want to contine?', 'Yes, I understand').then((response:string|undefined) => {
@@ -41,6 +41,10 @@ function move(importer:ReferenceIndexer, uri:vscode.Uri) {
         let item: FileItem = new FileItem(uri.fsPath, value, isDir);
         if (item.exists()) {
             vscode.window.showErrorMessage(value + ' already exists.');
+            return;
+        }
+        if(item.isDir && isInDir(uri.fsPath, value)) {
+            vscode.window.showErrorMessage('Cannot move a folder within itself');
             return;
         }
         return warnThenMove(importer, item);

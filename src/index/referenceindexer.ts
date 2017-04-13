@@ -13,6 +13,10 @@ interface Edit {
     replacement:string;
 }
 
+export function isInDir(dir:string, p:string) {
+    return !path.relative(dir, p).startsWith('../');
+}
+
 
 export class ReferenceIndexer {
     public index:ReferenceIndex = new ReferenceIndex();
@@ -328,13 +332,9 @@ export class ReferenceIndexer {
     }
 
     private getRelativePath(from:string, to:string):string {
-        let isInDir = (filePath:string, dir:string) => {
-            return !path.relative(dir, filePath).startsWith('../');
-        }
-
         for(let packageName in this.packageNames) {
             let packagePath = this.packageNames[packageName];
-            if(isInDir(to, packagePath) && !isInDir(from, packagePath)) {
+            if(isInDir(packagePath, to) && !isInDir(packagePath, from)) {
                 return packageName + '/' + path.relative(packagePath, to);
             }
         }
