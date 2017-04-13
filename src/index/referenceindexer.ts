@@ -68,8 +68,10 @@ export class ReferenceIndexer {
         });
     }
 
-    public clearOutput() {
-        this.output.clear();
+    public startNewMove(from:string, to:string) {
+        this.output.appendLine('--------------------------------------------------');
+        this.output.appendLine(`Moving ${from} -> ${to}`)
+        this.output.appendLine('--------------------------------------------------');
         this.output.appendLine('Files changed:');
     }
 
