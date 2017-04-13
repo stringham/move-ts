@@ -54,11 +54,15 @@ export class ReferenceIndex {
     public getDirReferences(directory:string):Reference[] {
         let result:Reference[] = [];
 
+        let added:{[key:string]:boolean} = {};
+
         for(let p in this.referencedBy) {
-            if(path.relative(directory, p).startsWith('../')) {
+            if(!path.relative(directory, p).startsWith('../')) {
                 this.referencedBy[p].forEach(reference => {
+                    if(added[reference.path]) return;
                     if(path.relative(directory, reference.path).startsWith('../')) {
                         result.push(reference);
+                        added[reference.path] = true;
                     }
                 });
             }
