@@ -1,9 +1,17 @@
 {
     "name": "move-ts",
     "displayName": "Move TS",
-    "description": "update import statements when moving ts files",
+    "description": "extension for moving typescript files and folders and updating relative imports in your workspace",
     "version": "1.0.0",
     "publisher": "stringham",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/stringham/move-ts.git"
+    },
+    "homepage":"https://github.com/stringham/move-ts",
+    "icon":"icon.svg",
+    "keywords":["typescript", "import", "move", "refactor", "relative"],
+
     "engines": {
         "vscode": "^1.10.0"
     },
@@ -28,7 +36,7 @@
             "title": "Move Typescript"
         },{
             "command": "move-ts.reindex",
-            "title": "Move TS: Re-index"
+            "title": "Move TS: Reindex"
         }]
     },
     "scripts": {
