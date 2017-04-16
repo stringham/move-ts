@@ -3,7 +3,7 @@
 Supports moving typescript files and updating relative imports within the workspace.
 
 ## Features
-Moves TypeScript files and folers containing TypeScript and updates their relative import paths.
+Moves TypeScript files and folders containing TypeScript and updates their relative import paths.
 
 ## How to use
 
