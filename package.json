@@ -2,7 +2,7 @@
     "name": "move-ts",
     "displayName": "Move TS",
     "description": "extension for moving typescript files and folders and updating relative imports in your workspace",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "publisher": "stringham",
     "repository": {
         "type": "git",
@@ -37,7 +37,18 @@
         },{
             "command": "move-ts.reindex",
             "title": "Move TS: Reindex"
-        }]
+        }],
+        "configuration": {
+            "type": "object",
+            "title": "Move TS configuration",
+            "properties": {
+                "movets.skipWarning": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Skip the warning when using the move typescript command"
+                }
+            }
+        }
     },
     "scripts": {
         "vscode:prepublish": "tsc -p ./",

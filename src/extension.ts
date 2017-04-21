@@ -6,23 +6,29 @@ import {FileItem} from './fileitem';
 import {ReferenceIndexer, isInDir} from './index/referenceindexer';
 
 function warnThenMove(importer:ReferenceIndexer, item:FileItem):Thenable<any> {
+    let doIt = () => {
+        return vscode.workspace.saveAll(false).then(() => {
+            importer.startNewMove(item.sourcePath, item.targetPath);
+            let move = item.move(importer)
+            move.catch(e => {
+                console.log('error in extension.ts', e);
+            })
+            if (!item.isDir) {
+                move.then(item => {
+                    return Promise.resolve(vscode.workspace.openTextDocument(item.targetPath))
+                        .then((textDocument: vscode.TextDocument) => vscode.window.showTextDocument(textDocument));
+                }).catch(e => {
+                    console.log('error in extension.ts', e);
+                });
+            }
+        });
+    }
+    if(importer.conf('skipWarning', false)) {
+        return doIt()
+    }
     return vscode.window.showWarningMessage('This will save all open editors and all changes will immediately be saved. Do you want to contine?', 'Yes, I understand').then((response:string|undefined) => {
         if (response == 'Yes, I understand') {
-            return vscode.workspace.saveAll(false).then(() => {
-                importer.startNewMove(item.sourcePath, item.targetPath);
-                let move = item.move(importer)
-                move.catch(e => {
-                    console.log('error in extension.ts', e);
-                })
-                if (!item.isDir) {
-                    move.then(item => {
-                        return Promise.resolve(vscode.workspace.openTextDocument(item.targetPath))
-                            .then((textDocument: vscode.TextDocument) => vscode.window.showTextDocument(textDocument));
-                    }).catch(e => {
-                        console.log('error in extension.ts', e);
-                    });
-                }
-            })
+            return doIt();
         } else {
             return undefined;
         }

@@ -45,6 +45,10 @@ export class ReferenceIndexer {
         })
     }
 
+    public conf<T>(property: string, defaultValue: T): T {
+        return vscode.workspace.getConfiguration('movets').get<T>(property, defaultValue);
+    }
+
     private readPackageNames():Thenable<any> {
         this.packageNames = {};
         let seenPackageNames:{[key:string]:boolean} = {};
