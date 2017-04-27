@@ -58,7 +58,7 @@
     },
     "dependencies": {
         "fs-extra-promise": "1.0.1",
-        "@types/fs-extra-promise": "0.0.31"
+        "@types/fs-extra-promise": "1.0.0"
     },
     "devDependencies": {
         "typescript": "^2.0.3",

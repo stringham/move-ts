@@ -125,36 +125,43 @@ export class ReferenceIndexer {
         })
     }
 
-    private getEdits(text:string, replacements:Replacement[]):Edit[] {
+    private getEdits(path:string, text:string, replacements:Replacement[]):Edit[] {
         function escapeRegExp(str:string) {
             return String(str)
                 .replace(/([-()\[\]{}+?*.$\^|,:#<!\\])/g, '\\$1')
                 .replace(/\x08/g, '\\x08');
         }
         let edits: Edit[] = [];
+        let relativeReferences = this.getRelativeReferences(text);
         replacements.forEach(replacement => {
             let before = replacement[0];
             let after = replacement[1];
             if (before == after) {
                 return;
             }
+            let beforeReference = this.resolveRelativeReference(path, before);
+            let beforeReplacements = relativeReferences.filter(ref => {
+                return this.resolveRelativeReference(path, ref) == beforeReference;
+            });
+            beforeReplacements.forEach(beforeReplacement => {
 
-            let regExp = new RegExp(`(import\\s+({[^}]*})?(\\S+)?(\\S+\\s+as\\s+\\S+)?\\s+from ['"])(${escapeRegExp(before)}(\\.ts)?)(['"];?)`, 'g');
+                let regExp = new RegExp(`(import\\s+({[^}]*})?(\\S+)?(\\S+\\s+as\\s+\\S+)?\\s+from ['"])(${escapeRegExp(beforeReplacement)}(\\.ts)?)(['"];?)`, 'g');
 
-            let match: RegExpExecArray | null;
-            while (match = regExp.exec(text)) {
-                let importLine = text.substring(match.index, regExp.lastIndex);
-                let start = importLine.indexOf(before);
-                if (importLine.indexOf(before, start + before.length) > 0) { //some weird double import maybe?
-                    continue;
+                let match: RegExpExecArray | null;
+                while (match = regExp.exec(text)) {
+                    let importLine = text.substring(match.index, regExp.lastIndex);
+                    let start = importLine.indexOf(beforeReplacement);
+                    if (importLine.indexOf(beforeReplacement, start + beforeReplacement.length) > 0) { //some weird double import maybe?
+                        continue;
+                    }
+                    let edit = {
+                        start:match.index + start,
+                        end:match.index + start + beforeReplacement.length,
+                        replacement:after,
+                    }
+                    edits.push(edit);
                 }
-                let edit = {
-                    start:match.index + start,
-                    end:match.index + start + before.length,
-                    replacement:after,
-                }
-                edits.push(edit);
-            }
+            })
         })
 
         return edits;
@@ -182,7 +189,7 @@ export class ReferenceIndexer {
     private replaceReferences(path:string, getReplacements:(text:string) => Replacement[]):Thenable<any> {
         return fs.readFileAsync(path, 'utf8').then(text => {
             let replacements = getReplacements(text);
-            let edits = this.getEdits(text, replacements);
+            let edits = this.getEdits(path, text, replacements);
             if(edits.length == 0) {
                 return Promise.resolve();
             }
@@ -199,7 +206,7 @@ export class ReferenceIndexer {
         //     let text = doc.getText();
         //     let replacements = getReplacements(text);
 
-        //     let edits = this.getEdits(text, replacements).map((edit:Edit) => {
+        //     let edits = this.getEdits(path, text, replacements).map((edit:Edit) => {
         //         return vscode.TextEdit.replace(new vscode.Range(doc.positionAt(edit.start), doc.positionAt(edit.end)), edit.replacement);
         //     });
         //     if (edits.length > 0) {
