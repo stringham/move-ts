@@ -26,7 +26,7 @@ function warnThenMove(importer:ReferenceIndexer, item:FileItem):Thenable<any> {
     if(importer.conf('skipWarning', false)) {
         return doIt()
     }
-    return vscode.window.showWarningMessage('This will save all open editors and all changes will immediately be saved. Do you want to contine?', 'Yes, I understand').then((response:string|undefined) => {
+    return vscode.window.showWarningMessage('This will save all open editors and all changes will immediately be saved. Do you want to continue?', 'Yes, I understand').then((response:string|undefined) => {
         if (response == 'Yes, I understand') {
             return doIt();
         } else {
