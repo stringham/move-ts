@@ -1,4 +1,4 @@
-import {ReferenceIndex} from './referenceindex';
+import { ReferenceIndex, isPathToAnotherDir } from './referenceindex';
 import * as fs from 'fs-extra-promise';
 import * as vscode from 'vscode';
 import * as path from 'path';
@@ -14,7 +14,8 @@ interface Edit {
 }
 
 export function isInDir(dir:string, p:string) {
-    return !path.relative(dir, p).startsWith('../');
+    let relative = path.relative(dir, p);
+    return !isPathToAnotherDir(relative);
 }
 
 
@@ -241,7 +242,7 @@ export class ReferenceIndexer {
                     let references = this.getRelativeReferences(text);
                     let change = references.filter(p => {
                         let abs = this.resolveRelativeReference(originalPath, p);
-                        return path.relative(from, abs).startsWith('../');
+                        return isPathToAnotherDir(path.relative(from, abs));
                     }).map((p):Replacement => {
                         let abs = this.resolveRelativeReference(originalPath, p);
                         let relative = this.getRelativePath(file.fsPath, abs);
@@ -262,7 +263,7 @@ export class ReferenceIndexer {
                 let imports = this.getRelativeReferences(text);
                 let change = imports.filter(p => {
                     let abs = this.resolveRelativeReference(reference.path, p);
-                    return !path.relative(from, abs).startsWith('../')
+                    return !isPathToAnotherDir(path.relative(from, abs));
                 }).map((p):[string,string] => {
                     let abs = this.resolveRelativeReference(reference.path, p);
                     let relative = path.relative(from, abs);
@@ -352,6 +353,7 @@ export class ReferenceIndexer {
             }
         }
         let relative = path.relative(path.dirname(from), to);
+        relative = relative.replace(/\\/g, "/");
         if(!relative.startsWith('.')) {
             relative = './' + relative;
         }

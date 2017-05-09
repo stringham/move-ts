@@ -4,6 +4,10 @@ export interface Reference {
     path:string;
 }
 
+export function isPathToAnotherDir(path: string) {
+    return path.startsWith('../') || path.startsWith('..\\');
+}
+
 export class ReferenceIndex {
     private referencedBy:{[key:string]:Reference[]} = {}; //path -> all of the files that reference it
 
@@ -57,10 +61,10 @@ export class ReferenceIndex {
         let added:{[key:string]:boolean} = {};
 
         for(let p in this.referencedBy) {
-            if(!path.relative(directory, p).startsWith('../')) {
+            if(!isPathToAnotherDir(path.relative(directory, p))) {
                 this.referencedBy[p].forEach(reference => {
                     if(added[reference.path]) return;
-                    if(path.relative(directory, reference.path).startsWith('../')) {
+                    if(isPathToAnotherDir(path.relative(directory, reference.path))) {
                         result.push(reference);
                         added[reference.path] = true;
                     }
