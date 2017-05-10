@@ -15,6 +15,14 @@ Moves TypeScript files and folders containing TypeScript and updates their relat
 
 ## Release Notes
 
+### 1.2.0
+
+Support for Windows paths
+
+### 1.1.0
+
+Add `movets.skipWarning` configuration option
+
 ### 1.0.0
 
 Initial release of Move TS
