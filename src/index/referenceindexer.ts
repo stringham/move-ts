@@ -146,7 +146,7 @@ export class ReferenceIndexer {
             });
             beforeReplacements.forEach(beforeReplacement => {
 
-                let regExp = new RegExp(`(import\\s+({[^}]*})?(\\S+)?(\\S+\\s+as\\s+\\S+)?\\s+from ['"])(${escapeRegExp(beforeReplacement)}(\\.ts)?)(['"];?)`, 'g');
+                let regExp = new RegExp(`((?:import|export)\\s+({[^}]*})?(\\S+)?(\\S+\\s+as\\s+\\S+)?\\s+from ['"])(${escapeRegExp(beforeReplacement)}(\\.ts)?)(['"];?)`, 'g');
 
                 let match: RegExpExecArray | null;
                 while (match = regExp.exec(text)) {
@@ -375,7 +375,7 @@ export class ReferenceIndexer {
 
     private getRelativeReferences(data:string):string[] {
         let references:string[] = [];
-        let importRegEx = /import\s+({[^}]*})?(\S+)?(\S+\s+as\s+\S+)?\s+from ['"]([^'"]+)['"];?/gi;
+        let importRegEx = /(?:import|export)\s+({[^}]*})?(\S+)?(\S+\s+as\s+\S+)?\s+from ['"]([^'"]+)['"];?/gi;
         let imports: RegExpExecArray | null;
         while(imports = importRegEx.exec(data)){
             let importModule = imports[4];
