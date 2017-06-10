@@ -15,6 +15,9 @@ Moves TypeScript files and folders containing TypeScript and updates their relat
 
 ## Release Notes
 
+### 1.3.0
+
+Support updating relative paths in export statements
 ### 1.2.0
 
 Support for Windows paths
