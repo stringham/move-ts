@@ -70,7 +70,10 @@ export function activate(context: vscode.ExtensionContext) {
 
     let moveDisposable = vscode.commands.registerCommand('move-ts.move', (uri?:vscode.Uri) => {
         let filePath = uri ? uri.fsPath : getCurrentPath();
-        if(filePath.length == 0) {
+        if(!filePath){
+            filePath = getCurrentPath();
+        }
+        if(!filePath || filePath.length == 0) {
             vscode.window.showErrorMessage('Could not find target to move. Right click in explorer or open a file to move.');
             return;
         }
