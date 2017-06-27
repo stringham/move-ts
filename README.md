@@ -15,6 +15,17 @@ Moves TypeScript files and folders containing TypeScript and updates their relat
 
 ## Release Notes
 
+### 1.3.1
+
+Allow initiating moving the current file with a hotkey. To use edit keybindings.json and add:
+
+```json
+{
+    "key": "ctrl+alt+m",
+    "command": "move-ts.move",
+    "when": "editorTextFocus"
+}
+```
 ### 1.3.0
 
 Support updating relative paths in export statements
