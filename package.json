@@ -46,6 +46,11 @@
                     "type": "boolean",
                     "default": false,
                     "description": "Skip the warning when using the move typescript command"
+                },
+                "movets.filesToScan": {
+                    "type": "array",
+                    "default": ["**/*.ts", "**/*.tsx"],
+                    "description": "Glob of files to scan and watch. Defaults to [**/*.ts,**/*.tsx]"
                 }
             }
         }
@@ -58,13 +63,15 @@
     },
     "dependencies": {
         "fs-extra-promise": "1.0.1",
-        "@types/fs-extra-promise": "1.0.1"
+        "@types/fs-extra-promise": "1.0.1",
+        "minimatch": "3.0.4"
     },
     "devDependencies": {
         "typescript": "^2.0.3",
         "vscode": "^1.0.0",
         "mocha": "^2.3.3",
         "@types/node": "^6.0.40",
+        "@types/minimatch": "2.0.29",
         "@types/mocha": "^2.2.32"
     }
 }

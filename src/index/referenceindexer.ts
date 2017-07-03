@@ -2,6 +2,7 @@ import { ReferenceIndex, isPathToAnotherDir } from './referenceindex';
 import * as fs from 'fs-extra-promise';
 import * as vscode from 'vscode';
 import * as path from 'path';
+const minimatch = require('minimatch');
 
 const BATCH_SIZE = 50;
 
@@ -26,8 +27,9 @@ export class ReferenceIndexer {
 
     private packageNames: {[key:string]:string} = {};
 
+    private extensions: string[] = ['.ts', '.tsx'];
+
     private paths: string[] = [];
-    private filesToScan: string[] = ['**/*.ts'];
     private filesToExclude: string[] = [];
     private fileWatcher: vscode.FileSystemWatcher;
 
@@ -80,9 +82,18 @@ export class ReferenceIndexer {
         this.output.appendLine('Files changed:');
     }
 
+    private get filesToScanGlob():string {
+        let filesToScan = this.conf('filesToScan', ['**/*.ts', '**/*.tsx']);
+        if(filesToScan.length == 0) {
+            return '';
+        }
+        return filesToScan.length == 1 ? filesToScan[0] : `{${filesToScan.join(',')}}`;
+    }
+
     private scanAll(reportProgress:boolean) {
         this.index = new ReferenceIndex();
-        return vscode.workspace.findFiles(this.filesToScan[0],'**/node_modules/**',100000)
+
+        return vscode.workspace.findFiles(this.filesToScanGlob,'**/node_modules/**',100000)
             .then(files => {
                 return this.processWorkspaceFiles(files, false, reportProgress);
             })
@@ -92,7 +103,7 @@ export class ReferenceIndexer {
         if(this.fileWatcher) {
             this.fileWatcher.dispose();
         }
-        this.fileWatcher = vscode.workspace.createFileSystemWatcher(this.filesToScan[0]);
+        this.fileWatcher = vscode.workspace.createFileSystemWatcher(this.filesToScanGlob);
 
         let watcher = this.fileWatcher;
         let batch:string[] = [];
@@ -101,7 +112,7 @@ export class ReferenceIndexer {
         let batchHandler = () => {
             batchTimeout = undefined;
 
-            vscode.workspace.findFiles(this.filesToScan[0], '**/node_modules/**', 10000)
+            vscode.workspace.findFiles(this.filesToScanGlob, '**/node_modules/**', 10000)
                 .then(files => {
                     let b = batch.splice(0, batch.length);
                     if(b.length) {
@@ -146,7 +157,7 @@ export class ReferenceIndexer {
             });
             beforeReplacements.forEach(beforeReplacement => {
 
-                let regExp = new RegExp(`((?:import|export)\\s+({[^}]*})?(\\S+)?(\\S+\\s+as\\s+\\S+)?\\s+from ['"])(${escapeRegExp(beforeReplacement)}(\\.ts)?)(['"];?)`, 'g');
+                let regExp = new RegExp(`((?:import|export)\\s+({[^}]*})?(\\S+)?(\\S+\\s+as\\s+\\S+)?\\s+from ['"])(${escapeRegExp(beforeReplacement)}(\\.tsx?)?)(['"];?)`, 'g');
 
                 let match: RegExpExecArray | null;
                 while (match = regExp.exec(text)) {
@@ -235,8 +246,11 @@ export class ReferenceIndexer {
 
     public updateMovedDir(from:string, to:string):Thenable<any> {
         let relative = vscode.workspace.asRelativePath(to);
-        return vscode.workspace.findFiles(relative+'/**/*.ts',undefined,100000).then(files => {
-            let promises = files.map(file => {
+        let glob = this.filesToScanGlob;
+        return vscode.workspace.findFiles(relative + '/**',undefined,100000).then(files => {
+            let promises = files.filter(file => {
+                return minimatch(file.fsPath, glob);
+            }).map(file => {
                 let originalPath = path.resolve(from, path.relative(to,file.fsPath));
                 return this.replaceReferences(file.fsPath, (text:string):Replacement[] => {
                     let references = this.getRelativeReferences(text);
@@ -277,19 +291,23 @@ export class ReferenceIndexer {
         return Promise.all(promises);
     }
 
+    public removeExtension(filePath:string): string {
+        let ext = path.extname(filePath);
+        if(this.extensions.indexOf(ext) >= 0) {
+            return filePath.slice(0,ext.length);
+        }
+        return filePath;
+    }
+
     public updateImports(from:string, to:string):Promise<any> {
         let affectedFiles = this.index.getReferences(from);
         let promises = affectedFiles.map(filePath => {
             return this.replaceReferences(filePath.path, (text:string):Replacement[] => {
                 let relative = this.getRelativePath(filePath.path, from);
-                if(relative.endsWith('.ts')) {
-                    relative = relative.substr(0,relative.length-3);
-                }
+                relative = this.removeExtension(relative);
 
                 let newRelative = this.getRelativePath(filePath.path, to);
-                if(newRelative.endsWith('.ts')) {
-                    newRelative = newRelative.substr(0, newRelative.length - 3);
-                }
+                newRelative = this.removeExtension(newRelative);
 
                 return [[relative, newRelative]]
             })
@@ -400,17 +418,17 @@ export class ReferenceIndexer {
         }
         let fsPath = file.fsPath.replace(/[\/\\]/g, "/");
 
-        if(fsPath.endsWith('.ts')) {
-            fsPath = fsPath.substring(0,fsPath.length - 3);
-        }
+        fsPath = this.removeExtension(fsPath);
 
         let references = this.getRelativeReferences(data);
 
         references.forEach(reference => {
             let referenced = this.resolveRelativeReference(file.fsPath, reference);
-            if(!referenced.endsWith('.ts') && fs.existsSync(referenced+'.ts')) {
-                referenced += '.ts';
-            }
+            this.extensions.forEach(ext => {
+                if(!referenced.endsWith(ext) && fs.existsSync(referenced+ext)) {
+                    referenced += ext;
+                }
+            });
             this.index.addReference(referenced, file.fsPath);
         });
 
