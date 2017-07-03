@@ -15,6 +15,12 @@ Moves TypeScript files and folders containing TypeScript and updates their relat
 
 ## Release Notes
 
+## 1.4.0
+
+Added support for `*.tsx` files.
+
+New configuration option that can limit which paths are scanned: `movets.filesToScan` should be an array of strings and defaults to `['**/*.ts', '**/*.tsx']`
+
 ### 1.3.1
 
 Allow initiating moving the current file with a hotkey. To use edit keybindings.json and add:
