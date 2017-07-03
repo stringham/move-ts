@@ -9,7 +9,7 @@
         "url": "https://github.com/stringham/move-ts.git"
     },
     "homepage":"https://github.com/stringham/move-ts",
-    "icon":"icon.svg",
+    "icon":"icon.png",
     "keywords":["typescript", "import", "move", "refactor", "relative"],
 
     "engines": {
