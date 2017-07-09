@@ -293,8 +293,11 @@ export class ReferenceIndexer {
 
     public removeExtension(filePath:string): string {
         let ext = path.extname(filePath);
+        if(ext == '.ts' && filePath.endsWith('.d.ts')) {
+            ext = '.d.ts';
+        }
         if(this.extensions.indexOf(ext) >= 0) {
-            return filePath.slice(0,ext.length);
+            return filePath.slice(0, -ext.length);
         }
         return filePath;
     }
