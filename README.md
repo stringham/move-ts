@@ -15,6 +15,10 @@ Moves TypeScript files and folders containing TypeScript and updates their relat
 
 ## Release Notes
 
+## 1.5.0
+
+Added support for `tsconfig.json` CompilerOptions -> paths.
+
 ## 1.4.0
 
 Added support for `*.tsx` files.
