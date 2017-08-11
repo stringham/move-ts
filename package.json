@@ -62,12 +62,12 @@
         "test": "node ./node_modules/vscode/bin/test"
     },
     "dependencies": {
+        "typescript": "^2.0.3",
         "fs-extra-promise": "1.0.1",
         "@types/fs-extra-promise": "1.0.1",
         "minimatch": "3.0.4"
     },
     "devDependencies": {
-        "typescript": "^2.0.3",
         "vscode": "^1.0.0",
         "mocha": "^2.3.3",
         "@types/node": "^6.0.40",
