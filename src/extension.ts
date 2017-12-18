@@ -81,9 +81,14 @@ export function activate(context: vscode.ExtensionContext) {
             return move(importer, filePath);
         }
         if(!importer.isInitialized) {
-            return importer.init().then(() => {
-                return go();
-            });
+            vscode.window.withProgress({
+                location: vscode.ProgressLocation.Window,
+                title:'Move-ts indexing',
+            }, async (progress) => {
+                return importer.init(progress);
+            }).then(() => {
+                go();
+            })
         } else {
             return go();
         }
@@ -91,10 +96,11 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(moveDisposable);
 
     let reIndexDisposable = vscode.commands.registerCommand('move-ts.reindex', () => {
-        let statusDisposable = vscode.window.setStatusBarMessage('move-ts reindexing...');
-        importer.init().then(() => {
-            statusDisposable.dispose();
-            vscode.window.setStatusBarMessage('move-ts reindex complete!', 3000);
+        vscode.window.withProgress({
+            location: vscode.ProgressLocation.Window,
+            title: 'Move-ts re-indexing',
+        }, async (progress) => {
+            return importer.init(progress);
         });
     });
     context.subscriptions.push(reIndexDisposable);

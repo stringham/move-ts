@@ -37,11 +37,11 @@ export class ReferenceIndexer {
 
     public isInitialized:boolean = false;
 
-    public init():Thenable<any> {
+    public init(progress?: vscode.Progress<{message:string}>):Thenable<any> {
         this.index = new ReferenceIndex();
 
         return this.readPackageNames().then(() => {
-            return this.scanAll(true).then(() => {
+            return this.scanAll(progress).then(() => {
                 return this.attachFileWatcher();
             }).then(() => {
                 console.log('move-ts initialized');
@@ -107,12 +107,12 @@ export class ReferenceIndexer {
         return filesToScan.length == 1 ? filesToScan[0] : `{${filesToScan.join(',')}}`;
     }
 
-    private scanAll(reportProgress:boolean) {
+    private scanAll(progress?: vscode.Progress<{message:string}>) {
         this.index = new ReferenceIndex();
 
         return vscode.workspace.findFiles(this.filesToScanGlob,'**/node_modules/**',100000)
             .then(files => {
-                return this.processWorkspaceFiles(files, false, reportProgress);
+                return this.processWorkspaceFiles(files, false, progress);
             })
     }
 
@@ -338,15 +338,13 @@ export class ReferenceIndexer {
         });
     }
 
-    private processWorkspaceFiles(files:vscode.Uri[], deleteByFile:boolean = false, reportProgress:boolean = false):Promise<any> {
+    private processWorkspaceFiles(files:vscode.Uri[], deleteByFile:boolean = false, progress?: vscode.Progress<{message:string}>):Promise<any> {
         files = files.filter((f) => {
             return f.fsPath.indexOf('typings') === -1 &&
                 f.fsPath.indexOf('node_modules') === -1 &&
                 f.fsPath.indexOf('jspm_packages') === -1;
         });
 
-
-        let statusBarDisposable:vscode.Disposable;
 
         return new Promise(resolve => {
             let index = 0;
@@ -362,20 +360,14 @@ export class ReferenceIndexer {
                     }
                 }
 
-                if(reportProgress) {
-                    if(statusBarDisposable) {
-                        statusBarDisposable.dispose();
-                    }
-                    statusBarDisposable = vscode.window.setStatusBarMessage('move-ts indexing... ' + index + '/' + files.length + ' indexed');
+                if(progress) {
+                    progress.report({message:'move-ts indexing... ' + index + '/' + files.length + ' indexed'});
                 }
 
 
                 if(index < files.length) {
                     setTimeout(next, 0);
                 } else {
-                    if (statusBarDisposable) {
-                        statusBarDisposable.dispose();
-                    }
                     resolve();
                 }
             }

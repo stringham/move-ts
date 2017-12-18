@@ -2,7 +2,7 @@
     "name": "move-ts",
     "displayName": "Move TS",
     "description": "extension for moving typescript files and folders and updating relative imports in your workspace",
-    "version": "1.5.0",
+    "version": "1.6.0",
     "publisher": "stringham",
     "repository": {
         "type": "git",
@@ -13,7 +13,7 @@
     "keywords":["typescript", "import", "move", "refactor", "relative"],
 
     "engines": {
-        "vscode": "^1.10.0"
+        "vscode": "^1.12.0"
     },
     "categories": [
         "Other"
@@ -68,7 +68,7 @@
         "minimatch": "3.0.4"
     },
     "devDependencies": {
-        "vscode": "^1.0.0",
+        "vscode": "^1.1.10",
         "mocha": "^2.3.3",
         "@types/node": "^6.0.40",
         "@types/minimatch": "2.0.29",

@@ -15,6 +15,10 @@ Moves TypeScript files and folders containing TypeScript and updates their relat
 
 ## Release Notes
 
+## 1.6.0
+
+Report progress with vscode's withProgress extension api when indexing the workspace.
+
 ## 1.5.0
 
 Added support for `tsconfig.json` CompilerOptions -> paths.
