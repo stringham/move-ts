@@ -109,11 +109,13 @@ export class ReferenceIndexer {
 
     private scanAll(progress?: vscode.Progress<{message:string}>) {
         this.index = new ReferenceIndex();
-
+        let start = Date.now();
         return vscode.workspace.findFiles(this.filesToScanGlob,'**/node_modules/**',100000)
             .then(files => {
                 return this.processWorkspaceFiles(files, false, progress);
-            })
+            }).then(() => {
+                console.log('scan finished in ' + (Date.now() - start) + 'ms');
+            });
     }
 
     private attachFileWatcher():void {
@@ -377,17 +379,17 @@ export class ReferenceIndexer {
     }
 
     private getRelativePath(from:string, to:string):string {
-        for(let configPath in this.tsconfigs) {
-            if(isInDir(path.dirname(configPath), from)) {
-                let config = this.tsconfigs[configPath];
-                if(config.compilerOptions && config.compilerOptions.paths) {
-                    for(let p in config.compilerOptions.paths) {
-                        if(config.compilerOptions.paths[p].length == 1) {
-                            let mapped = config.compilerOptions.paths[p][0].replace('*','');
-                            let mappedDir = path.resolve(path.dirname(configPath), mapped);
-                            if(isInDir(mappedDir, to)) {
-                                return p.replace('*','') + path.relative(mappedDir, to);
-                            }
+        let configInfo = this.getTsConfig(from);
+        if(configInfo) {
+            let config = configInfo.config;
+            let configPath = configInfo.configPath;
+            if(config.compilerOptions && config.compilerOptions.paths) {
+                for(let p in config.compilerOptions.paths) {
+                    if(config.compilerOptions.paths[p].length == 1) {
+                        let mapped = config.compilerOptions.paths[p][0].slice(0,-1);
+                        let mappedDir = path.resolve(path.dirname(configPath), mapped);
+                        if(isInDir(mappedDir, to)) {
+                            return p.slice(0,-1) + path.relative(mappedDir, to);
                         }
                     }
                 }
@@ -411,17 +413,17 @@ export class ReferenceIndexer {
         if(reference.startsWith('.')) {
             return path.resolve(path.dirname(fsPath), reference);
         } else {
-            for(let configPath in this.tsconfigs) {
-                if(isInDir(path.dirname(configPath), fsPath)) {
-                    let config = this.tsconfigs[configPath];
-                    if(config.compilerOptions && config.compilerOptions.paths) {
-                        for(let p in config.compilerOptions.paths) {
-                            if(p.endsWith('*') && reference.startsWith(p.replace('*',''))) {
-                                if(config.compilerOptions.paths[p].length == 1) {
-                                    let mapped = config.compilerOptions.paths[p][0].replace('*','');
-                                    let mappedDir = path.resolve(path.dirname(configPath), mapped);
-                                    return mappedDir + '/' + reference.substr(p.replace('*','').length);
-                                }
+            let configInfo = this.getTsConfig(fsPath);
+            if(configInfo) {
+                let config = configInfo.config;
+                let configPath = configInfo.configPath;
+                if(config.compilerOptions && config.compilerOptions.paths) {
+                    for(let p in config.compilerOptions.paths) {
+                        if(p.endsWith('*') && reference.startsWith(p.slice(0,-1))) {
+                            if(config.compilerOptions.paths[p].length == 1) {
+                                let mapped = config.compilerOptions.paths[p][0].slice(0,-1);
+                                let mappedDir = path.resolve(path.dirname(configPath), mapped);
+                                return mappedDir + '/' + reference.substr(p.slice(0,-1).length);
                             }
                         }
                     }
@@ -436,45 +438,55 @@ export class ReferenceIndexer {
         return '';
     }
 
+    private getTsConfig(filePath: string): any {
+        let dir = path.dirname(filePath);
+        while (dir != '/') {
+            let tsConfigPath = dir + '/tsconfig.json';
+            if (this.tsconfigs.hasOwnProperty(tsConfigPath)) {
+                return {config:this.tsconfigs[tsConfigPath], configPath: tsConfigPath};
+            }
+            dir = path.dirname(dir);
+        }
+        return null;
+    }
+
     private getRelativeReferences(data:string, filePath:string):string[] {
-        let references:string[] = [];
+        let references:Set<string> = new Set();
         let importRegEx = /(?:import|export)\s+({[^}]*})?(\S+)?(\S+\s+as\s+\S+)?\s+from ['"]([^'"]+)['"];?/gi;
         let imports: RegExpExecArray | null;
+        let config: any = undefined;
+        let getConfig = () => {
+            if(config === undefined) {
+                config = this.getTsConfig(filePath);
+                config = config && config.config;
+            }
+            return config;
+        }
         while(imports = importRegEx.exec(data)){
             let importModule = imports[4];
             if(importModule.startsWith('.')) {
-                if(references.indexOf(importModule) < 0) {
-                    references.push(importModule);
-                }
+                references.add(importModule);
             } else {
                 let found = false;
-                for(let configPath in this.tsconfigs) {
-                    if(isInDir(path.dirname(configPath), filePath)) {
-                        let config = this.tsconfigs[configPath];
-                        if(config.compilerOptions && config.compilerOptions.paths) {
-                            for(let p in config.compilerOptions.paths) {
-                                if(p.endsWith('*') && importModule.startsWith(p.replace('*','')) && config.compilerOptions.paths[p].length == 1) {
-                                    if(references.indexOf(importModule) < 0) {
-                                        references.push(importModule);
-                                    }
-                                    found = true;
-                                }
-                            }
+                let config = getConfig();
+                if(config && config.compilerOptions && config.compilerOptions.paths) {
+                    for(let p in config.compilerOptions.paths) {
+                        if(p.endsWith('*') && importModule.startsWith(p.slice(0,-1)) && config.compilerOptions.paths[p].length == 1) {
+                            references.add(importModule);
+                            found = true;
                         }
                     }
                 }
                 if(!found) {
                     for(let packageName in this.packageNames) {
                         if(importModule.startsWith(packageName + '/')) {
-                            if(references.indexOf(importModule) < 0) {
-                                references.push(importModule);
-                            }
+                            references.add(importModule);
                         }
                     }
                 }
             }
         }
-        return references;
+        return Array.from(references);
     }
 
     private processFile(data:string, file:vscode.Uri, deleteByFile:boolean = false) {
@@ -487,15 +499,16 @@ export class ReferenceIndexer {
 
         let references = this.getRelativeReferences(data, fsPath);
 
-        references.forEach(reference => {
-            let referenced = this.resolveRelativeReference(file.fsPath, reference);
-            this.extensions.forEach(ext => {
+        for(let i=0; i<references.length; i++) {
+            let referenced = this.resolveRelativeReference(file.fsPath, references[i]);
+            for(let j=0; j<this.extensions.length; j++) {
+                let ext = this.extensions[j];
                 if(!referenced.endsWith(ext) && fs.existsSync(referenced+ext)) {
                     referenced += ext;
                 }
-            });
+            }
             this.index.addReference(referenced, file.fsPath);
-        });
+        }
 
     }
 }
