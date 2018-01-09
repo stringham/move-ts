@@ -15,6 +15,10 @@ Moves TypeScript files and folders containing TypeScript and updates their relat
 
 ## Release Notes
 
+## 1.7.1
+
+Fix bug with indexing in Windows.
+
 ## 1.7.0
 
 Improve performance of indexing the workspace.

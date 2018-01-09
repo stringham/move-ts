@@ -439,12 +439,14 @@ export class ReferenceIndexer {
     }
 
     private getTsConfig(filePath: string): any {
+        let prevDir = filePath;
         let dir = path.dirname(filePath);
-        while (dir != '/') {
+        while (dir != prevDir) {
             let tsConfigPath = dir + '/tsconfig.json';
             if (this.tsconfigs.hasOwnProperty(tsConfigPath)) {
                 return {config:this.tsconfigs[tsConfigPath], configPath: tsConfigPath};
             }
+            prevDir = dir;
             dir = path.dirname(dir);
         }
         return null;
