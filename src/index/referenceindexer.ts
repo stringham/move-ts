@@ -243,7 +243,7 @@ export class ReferenceIndexer {
 
     public updateMovedFile(from:string, to:string):Thenable<any> {
         return this.replaceReferences(to, (text:string):Replacement[] => {
-            let references = this.getRelativeReferences(text, from).map(r => r.specifier);
+            let references = this.getRelativeImportSpecifiers(text, from);
 
             let replacements = references.map((reference):[string, string] => {
                 let absReference = this.resolveRelativeReference(from, reference);
@@ -263,7 +263,7 @@ export class ReferenceIndexer {
             }).map(file => {
                 let originalPath = path.resolve(from, path.relative(to,file.fsPath));
                 return this.replaceReferences(file.fsPath, (text:string):Replacement[] => {
-                    let references = this.getRelativeReferences(text, file.fsPath).map(r => r.specifier);
+                    let references = this.getRelativeImportSpecifiers(text, file.fsPath);
                     let change = references.filter(p => {
                         let abs = this.resolveRelativeReference(originalPath, p);
                         return isPathToAnotherDir(path.relative(from, abs));
@@ -284,7 +284,7 @@ export class ReferenceIndexer {
         let affectedFiles = this.index.getDirReferences(from);
         let promises = affectedFiles.map(reference => {
             return this.replaceReferences(reference.path, (text:string):Replacement[] => {
-                let imports = this.getRelativeReferences(text, reference.path).map(r => r.specifier);
+                let imports = this.getRelativeImportSpecifiers(text, reference.path);
                 let change = imports.filter(p => {
                     let abs = this.resolveRelativeReference(reference.path, p);
                     return !isPathToAnotherDir(path.relative(from, abs));
@@ -442,24 +442,28 @@ export class ReferenceIndexer {
         return null;
     }
 
-    private getImportSpecifiers(fileName: string, data: string): Reference[] {
+    private getRelativeImportSpecifiers(data: string, filePath: string): string[] {
+        return this.getRelativeReferences(data, filePath).map(ref => ref.specifier);
+    }
+
+    private getReferences(fileName: string, data: string): Reference[] {
         let result: Reference[] = [];
-        let file = ts.createSourceFile(fileName, data, ts.ScriptTarget.Latest, true)
+        let file = ts.createSourceFile(fileName, data, ts.ScriptTarget.Latest)
 
-        walk(file, node => {
-            if (node.kind == ts.SyntaxKind.ImportDeclaration) {
-                let i = node as ts.ImportDeclaration;
-                let specifier = (i.moduleSpecifier as ts.StringLiteral).text;
-                result.push({
-                    specifier: specifier,
-                    location: {
-                        start:i.moduleSpecifier.getStart(),
-                        end:i.moduleSpecifier.getEnd(),
-                    }
-                });
-
+        file.statements.forEach((node: ts.Node) => {
+            if(ts.isImportDeclaration(node)) {
+                if(ts.isStringLiteral(node.moduleSpecifier)) {
+                    result.push({
+                        specifier: node.moduleSpecifier.text,
+                        location:{
+                            start: node.moduleSpecifier.getStart(file),
+                            end: node.moduleSpecifier.getEnd(),
+                        },
+                    });
+                }
             }
         });
+
         return result;
     }
 
@@ -473,7 +477,7 @@ export class ReferenceIndexer {
             }
             return config;
         }
-        const imports = this.getImportSpecifiers(filePath, data);
+        const imports = this.getReferences(filePath, data);
         for(let i=0; i<imports.length; i++) {
             let importModule = imports[i].specifier;
             if(importModule.startsWith('.')) {
@@ -509,7 +513,7 @@ export class ReferenceIndexer {
 
         fsPath = this.removeExtension(fsPath);
 
-        let references = this.getRelativeReferences(data, fsPath).map(r => r.specifier);
+        let references = this.getRelativeImportSpecifiers(data, fsPath);
 
         for(let i=0; i<references.length; i++) {
             let referenced = this.resolveRelativeReference(file.fsPath, references[i]);

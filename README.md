@@ -15,7 +15,12 @@ Moves TypeScript files and folders containing TypeScript and updates their relat
 
 ## Release Notes
 
-## 1.7.2
+## 1.8.1
+
+Improve indexing performance using the TypeScript parser.
+
+## 1.8.0
+
 Use the TypeScript parser instead of regular expressions to find and replace imports.
 
 ## 1.7.1
