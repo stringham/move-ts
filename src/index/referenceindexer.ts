@@ -243,7 +243,7 @@ export class ReferenceIndexer {
 
     public updateMovedFile(from:string, to:string):Thenable<any> {
         return this.replaceReferences(to, (text:string):Replacement[] => {
-            let references = this.getRelativeImportSpecifiers(text, from);
+            let references = Array.from(new Set(this.getRelativeImportSpecifiers(text, from)));
 
             let replacements = references.map((reference):[string, string] => {
                 let absReference = this.resolveRelativeReference(from, reference);

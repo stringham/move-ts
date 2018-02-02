@@ -15,6 +15,10 @@ Moves TypeScript files and folders containing TypeScript and updates their relat
 
 ## Release Notes
 
+## 1.8.2
+
+Fix a bug when a moved file has two import statements using the same module specifier.
+
 ## 1.8.1
 
 Improve indexing performance using the TypeScript parser.
