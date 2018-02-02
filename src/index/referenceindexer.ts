@@ -3,6 +3,7 @@ import * as fs from 'fs-extra-promise';
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as ts from 'typescript';
+import { walk } from "../walk";
 const minimatch = require('minimatch');
 
 const BATCH_SIZE = 50;
@@ -13,6 +14,11 @@ interface Edit {
     start:number;
     end:number;
     replacement:string;
+}
+
+interface Reference {
+    specifier:string;
+    location:{start:number,end:number}
 }
 
 export function isInDir(dir:string, p:string) {
@@ -80,7 +86,7 @@ export class ReferenceIndexer {
             let promises = files.map(file => {
                 return fs.readFileAsync(file.fsPath, 'utf-8').then(content => {
                     try {
-                        let config = ts.parseConfigFileTextToJson(file.fsPath, content, true);
+                        let config = ts.parseConfigFileTextToJson(file.fsPath, content);
                         if(config.config) {
                             this.tsconfigs[file.fsPath] = config.config;
                         }
@@ -157,11 +163,6 @@ export class ReferenceIndexer {
     }
 
     private getEdits(path:string, text:string, replacements:Replacement[], fromPath?:string):Edit[] {
-        function escapeRegExp(str:string) {
-            return String(str)
-                .replace(/([-()\[\]{}+?*.$\^|,:#<!\\])/g, '\\$1')
-                .replace(/\x08/g, '\\x08');
-        }
         let edits: Edit[] = [];
         let relativeReferences = this.getRelativeReferences(text, fromPath || path);
         replacements.forEach(replacement => {
@@ -173,26 +174,15 @@ export class ReferenceIndexer {
             let beforeReference = this.resolveRelativeReference(fromPath || path, before);
             let seen:any = {};
             let beforeReplacements = relativeReferences.filter(ref => {
-                return this.resolveRelativeReference(fromPath || path, ref) == beforeReference;
+                return this.resolveRelativeReference(fromPath || path, ref.specifier) == beforeReference;
             });
             beforeReplacements.forEach(beforeReplacement => {
-
-                let regExp = new RegExp(`((?:import|export)\\s+({[^}]*})?(\\S+)?(\\S+\\s+as\\s+\\S+)?\\s+from ['"])(${escapeRegExp(beforeReplacement)}(\\.tsx?)?)(['"];?)`, 'g');
-
-                let match: RegExpExecArray | null;
-                while (match = regExp.exec(text)) {
-                    let importLine = text.substring(match.index, regExp.lastIndex);
-                    let start = importLine.indexOf(beforeReplacement);
-                    if (importLine.indexOf(beforeReplacement, start + beforeReplacement.length) > 0) { //some weird double import maybe?
-                        continue;
-                    }
-                    let edit = {
-                        start:match.index + start,
-                        end:match.index + start + beforeReplacement.length,
-                        replacement:after,
-                    }
-                    edits.push(edit);
+                let edit = {
+                    start:beforeReplacement.location.start + 1,
+                    end:beforeReplacement.location.end - 1,
+                    replacement:after,
                 }
+                edits.push(edit);
             })
         })
 
@@ -253,7 +243,7 @@ export class ReferenceIndexer {
 
     public updateMovedFile(from:string, to:string):Thenable<any> {
         return this.replaceReferences(to, (text:string):Replacement[] => {
-            let references = this.getRelativeReferences(text, from);
+            let references = this.getRelativeReferences(text, from).map(r => r.specifier);
 
             let replacements = references.map((reference):[string, string] => {
                 let absReference = this.resolveRelativeReference(from, reference);
@@ -273,7 +263,7 @@ export class ReferenceIndexer {
             }).map(file => {
                 let originalPath = path.resolve(from, path.relative(to,file.fsPath));
                 return this.replaceReferences(file.fsPath, (text:string):Replacement[] => {
-                    let references = this.getRelativeReferences(text, file.fsPath);
+                    let references = this.getRelativeReferences(text, file.fsPath).map(r => r.specifier);
                     let change = references.filter(p => {
                         let abs = this.resolveRelativeReference(originalPath, p);
                         return isPathToAnotherDir(path.relative(from, abs));
@@ -294,7 +284,7 @@ export class ReferenceIndexer {
         let affectedFiles = this.index.getDirReferences(from);
         let promises = affectedFiles.map(reference => {
             return this.replaceReferences(reference.path, (text:string):Replacement[] => {
-                let imports = this.getRelativeReferences(text, reference.path);
+                let imports = this.getRelativeReferences(text, reference.path).map(r => r.specifier);
                 let change = imports.filter(p => {
                     let abs = this.resolveRelativeReference(reference.path, p);
                     return !isPathToAnotherDir(path.relative(from, abs));
@@ -452,10 +442,29 @@ export class ReferenceIndexer {
         return null;
     }
 
-    private getRelativeReferences(data:string, filePath:string):string[] {
+    private getImportSpecifiers(fileName: string, data: string): Reference[] {
+        let result: Reference[] = [];
+        let file = ts.createSourceFile(fileName, data, ts.ScriptTarget.Latest, true)
+
+        walk(file, node => {
+            if (node.kind == ts.SyntaxKind.ImportDeclaration) {
+                let i = node as ts.ImportDeclaration;
+                let specifier = (i.moduleSpecifier as ts.StringLiteral).text;
+                result.push({
+                    specifier: specifier,
+                    location: {
+                        start:i.moduleSpecifier.getStart(),
+                        end:i.moduleSpecifier.getEnd(),
+                    }
+                });
+
+            }
+        });
+        return result;
+    }
+
+    private getRelativeReferences(data:string, filePath:string):Reference[] {
         let references:Set<string> = new Set();
-        let importRegEx = /(?:import|export)\s+({[^}]*})?(\S+)?(\S+\s+as\s+\S+)?\s+from ['"]([^'"]+)['"];?/gi;
-        let imports: RegExpExecArray | null;
         let config: any = undefined;
         let getConfig = () => {
             if(config === undefined) {
@@ -464,8 +473,9 @@ export class ReferenceIndexer {
             }
             return config;
         }
-        while(imports = importRegEx.exec(data)){
-            let importModule = imports[4];
+        const imports = this.getImportSpecifiers(filePath, data);
+        for(let i=0; i<imports.length; i++) {
+            let importModule = imports[i].specifier;
             if(importModule.startsWith('.')) {
                 references.add(importModule);
             } else {
@@ -488,7 +498,7 @@ export class ReferenceIndexer {
                 }
             }
         }
-        return Array.from(references);
+        return imports.filter(i => references.has(i.specifier));
     }
 
     private processFile(data:string, file:vscode.Uri, deleteByFile:boolean = false) {
@@ -499,7 +509,7 @@ export class ReferenceIndexer {
 
         fsPath = this.removeExtension(fsPath);
 
-        let references = this.getRelativeReferences(data, fsPath);
+        let references = this.getRelativeReferences(data, fsPath).map(r => r.specifier);
 
         for(let i=0; i<references.length; i++) {
             let referenced = this.resolveRelativeReference(file.fsPath, references[i]);

@@ -2,16 +2,21 @@
     "name": "move-ts",
     "displayName": "Move TS",
     "description": "extension for moving typescript files and folders and updating relative imports in your workspace",
-    "version": "1.7.1",
+    "version": "1.7.2",
     "publisher": "stringham",
     "repository": {
         "type": "git",
         "url": "https://github.com/stringham/move-ts.git"
     },
-    "homepage":"https://github.com/stringham/move-ts",
-    "icon":"icon.png",
-    "keywords":["typescript", "import", "move", "refactor", "relative"],
-
+    "homepage": "https://github.com/stringham/move-ts",
+    "icon": "icon.png",
+    "keywords": [
+        "typescript",
+        "import",
+        "move",
+        "refactor",
+        "relative"
+    ],
     "engines": {
         "vscode": "^1.12.0"
     },
@@ -24,20 +29,25 @@
     ],
     "main": "./out/src/extension",
     "contributes": {
-        "menus":{
-            "explorer/context":[{
-                "command":"move-ts.move",
-                "group": "1_modification",
-                "when": "explorerViewletVisible"
-            }]
+        "menus": {
+            "explorer/context": [
+                {
+                    "command": "move-ts.move",
+                    "group": "1_modification",
+                    "when": "explorerViewletVisible"
+                }
+            ]
         },
-        "commands": [{
-            "command": "move-ts.move",
-            "title": "Move Typescript"
-        },{
-            "command": "move-ts.reindex",
-            "title": "Move TS: Reindex"
-        }],
+        "commands": [
+            {
+                "command": "move-ts.move",
+                "title": "Move Typescript"
+            },
+            {
+                "command": "move-ts.reindex",
+                "title": "Move TS: Reindex"
+            }
+        ],
         "configuration": {
             "type": "object",
             "title": "Move TS configuration",
@@ -49,7 +59,10 @@
                 },
                 "movets.filesToScan": {
                     "type": "array",
-                    "default": ["**/*.ts", "**/*.tsx"],
+                    "default": [
+                        "**/*.ts",
+                        "**/*.tsx"
+                    ],
                     "description": "Glob of files to scan and watch. Defaults to [**/*.ts,**/*.tsx]"
                 }
             }
@@ -62,7 +75,7 @@
         "test": "node ./node_modules/vscode/bin/test"
     },
     "dependencies": {
-        "typescript": "^2.0.3",
+        "typescript": "^2.7.1",
         "fs-extra-promise": "1.0.1",
         "@types/fs-extra-promise": "1.0.1",
         "minimatch": "3.0.4"

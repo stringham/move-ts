@@ -15,6 +15,9 @@ Moves TypeScript files and folders containing TypeScript and updates their relat
 
 ## Release Notes
 
+## 1.7.2
+Use the TypeScript parser instead of regular expressions to find and replace imports.
+
 ## 1.7.1
 
 Fix bug with indexing in Windows.
