@@ -2,7 +2,7 @@
     "name": "move-ts",
     "displayName": "Move TS",
     "description": "extension for moving typescript files and folders and updating relative imports in your workspace",
-    "version": "1.8.2",
+    "version": "1.9.0",
     "publisher": "stringham",
     "repository": {
         "type": "git",
@@ -52,6 +52,11 @@
             "type": "object",
             "title": "Move TS configuration",
             "properties": {
+                "movets.relativeToTsconfig": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Create relative paths relative to the tsconfig.json"
+                },
                 "movets.skipWarning": {
                     "type": "boolean",
                     "default": false,

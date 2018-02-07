@@ -15,6 +15,10 @@ Moves TypeScript files and folders containing TypeScript and updates their relat
 
 ## Release Notes
 
+## 1.9.0
+
+Added the ability to resolve relative paths based on the location of `tsconfig.json`. To enable set `movets.relativeToTsconfig` to `true` in User Settings.
+
 ## 1.8.2
 
 Fix a bug when a moved file has two import statements using the same module specifier.

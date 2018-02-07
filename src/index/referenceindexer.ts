@@ -391,6 +391,13 @@ export class ReferenceIndexer {
                 return packageName + '/' + path.relative(packagePath, to);
             }
         }
+        let relativeToTsConfig = this.conf('relativeToTsconfig', false);
+        if(relativeToTsConfig && configInfo) {
+            let configDir = path.dirname(configInfo.configPath);
+            if(isInDir(configDir, from) && isInDir(configDir, to)) {
+                return path.relative(configDir, to);
+            }
+        }
         let relative = path.relative(path.dirname(from), to);
         relative = relative.replace(/\\/g, "/");
         if(!relative.startsWith('.')) {
@@ -407,6 +414,18 @@ export class ReferenceIndexer {
             if(configInfo) {
                 let config = configInfo.config;
                 let configPath = configInfo.configPath;
+                let relativeToTsConfig = this.conf('relativeToTsconfig', false);
+                if(relativeToTsConfig && configPath) {
+                    let check = path.resolve(path.dirname(configPath), reference);
+                    if(fs.existsSync(check)) {
+                        return check;
+                    }
+                    for(let i=0; i<this.extensions.length; i++) {
+                        if(fs.existsSync(check + this.extensions[i])) {
+                            return check;
+                        }
+                    }
+                }
                 if(config.compilerOptions && config.compilerOptions.paths) {
                     for(let p in config.compilerOptions.paths) {
                         if(p.endsWith('*') && reference.startsWith(p.slice(0,-1))) {
@@ -469,13 +488,12 @@ export class ReferenceIndexer {
 
     private getRelativeReferences(data:string, filePath:string):Reference[] {
         let references:Set<string> = new Set();
-        let config: any = undefined;
+        let cachedConfig: any = undefined;
         let getConfig = () => {
-            if(config === undefined) {
-                config = this.getTsConfig(filePath);
-                config = config && config.config;
+            if(cachedConfig === undefined) {
+                cachedConfig = this.getTsConfig(filePath);
             }
-            return config;
+            return cachedConfig;
         }
         const imports = this.getReferences(filePath, data);
         for(let i=0; i<imports.length; i++) {
@@ -484,8 +502,21 @@ export class ReferenceIndexer {
                 references.add(importModule);
             } else {
                 let found = false;
-                let config = getConfig();
-                if(config && config.compilerOptions && config.compilerOptions.paths) {
+                let configInfo = getConfig();
+                let config = configInfo && configInfo.config;
+                let configPath = configInfo && configInfo.configPath;
+                let relativeToTsConfig = this.conf('relativeToTsconfig', false);
+                if(relativeToTsConfig && configPath) {
+                    let check = path.resolve(path.dirname(configPath), importModule);
+                    for(let i=0; i<this.extensions.length; i++) {
+                        if(fs.existsSync(check + this.extensions[i])) {
+                            references.add(importModule);
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if(!found && config && config.compilerOptions && config.compilerOptions.paths) {
                     for(let p in config.compilerOptions.paths) {
                         if(p.endsWith('*') && importModule.startsWith(p.slice(0,-1)) && config.compilerOptions.paths[p].length == 1) {
                             references.add(importModule);
