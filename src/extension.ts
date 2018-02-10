@@ -7,7 +7,8 @@ import {ReferenceIndexer, isInDir} from './index/referenceindexer';
 
 function warnThenMove(importer:ReferenceIndexer, item:FileItem):Thenable<any> {
     let doIt = () => {
-        return vscode.workspace.saveAll(false).then(() => {
+        let preMove: Thenable<any> = importer.conf('openEditors', false) ? Promise.resolve() : vscode.workspace.saveAll(false);
+        return preMove.then(() => {
             importer.startNewMove(item.sourcePath, item.targetPath);
             let move = item.move(importer)
             move.catch(e => {
@@ -23,7 +24,7 @@ function warnThenMove(importer:ReferenceIndexer, item:FileItem):Thenable<any> {
             }
         });
     }
-    if(importer.conf('skipWarning', false)) {
+    if(importer.conf('skipWarning', false) || importer.conf('openEditors', false)) {
         return doIt()
     }
     return vscode.window.showWarningMessage('This will save all open editors and all changes will immediately be saved. Do you want to continue?', 'Yes, I understand').then((response:string|undefined) => {

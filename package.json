@@ -1,8 +1,8 @@
 {
     "name": "move-ts",
-    "displayName": "Move TS",
+    "displayName": "Move TS - Move TypeScript files and update relative imports",
     "description": "extension for moving typescript files and folders and updating relative imports in your workspace",
-    "version": "1.9.0",
+    "version": "1.10.0",
     "publisher": "stringham",
     "repository": {
         "type": "git",
@@ -69,6 +69,11 @@
                         "**/*.tsx"
                     ],
                     "description": "Glob of files to scan and watch. Defaults to [**/*.ts,**/*.tsx]"
+                },
+                "movets.openEditors": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Make edits in vscode instead of saving the changes to disk."
                 }
             }
         }

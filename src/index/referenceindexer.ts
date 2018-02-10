@@ -28,6 +28,7 @@ export function isInDir(dir:string, p:string) {
 
 
 export class ReferenceIndexer {
+    changeDocumentEvent: vscode.Disposable;
     private tsconfigs: {[key:string]:any};
     public index: ReferenceIndex = new ReferenceIndex();
 
@@ -128,10 +129,17 @@ export class ReferenceIndexer {
         if(this.fileWatcher) {
             this.fileWatcher.dispose();
         }
+        if(this.changeDocumentEvent) {
+            this.changeDocumentEvent.dispose();
+        }
+        this.changeDocumentEvent = vscode.workspace.onDidChangeTextDocument(changeEvent => {
+            addBatch(changeEvent.document.uri, changeEvent.document);
+        })
         this.fileWatcher = vscode.workspace.createFileSystemWatcher(this.filesToScanGlob);
 
         let watcher = this.fileWatcher;
         let batch:string[] = [];
+        let documents: vscode.TextDocument[] = [];
         let batchTimeout:any = undefined;
 
         let batchHandler = () => {
@@ -139,15 +147,23 @@ export class ReferenceIndexer {
 
             vscode.workspace.findFiles(this.filesToScanGlob, '**/node_modules/**', 10000)
                 .then(files => {
-                    let b = batch.splice(0, batch.length);
-                    if(b.length) {
-                        this.processWorkspaceFiles(files.filter(f => b.indexOf(f.fsPath)>=0), true)
+                    let b = new Set(batch.splice(0, batch.length));
+                    if(b.size) {
+                        this.processWorkspaceFiles(files.filter(f => b.has(f.fsPath)), true);
                     }
-                })
+                    let docs = documents.splice(0,documents.length);
+                    if(docs.length) {
+                        this.processDocuments(docs);
+                    }
+                });
         }
 
-        let addBatch = (file:vscode.Uri) => {
-            batch.push(file.fsPath);
+        let addBatch = (file:vscode.Uri, doc?: vscode.TextDocument) => {
+            if(doc) {
+                documents.push(doc);
+            } else {
+                batch.push(file.fsPath);
+            }
             if(batchTimeout) {
                 clearTimeout(batchTimeout);
                 batchTimeout = undefined;
@@ -209,36 +225,49 @@ export class ReferenceIndexer {
 
 
     private replaceReferences(path:string, getReplacements:(text:string) => Replacement[], fromPath?:string):Thenable<any> {
-        return fs.readFileAsync(path, 'utf8').then(text => {
-            let replacements = getReplacements(text);
-            let edits = this.getEdits(path, text, replacements, fromPath);
-            if(edits.length == 0) {
-                return Promise.resolve();
+        if(!this.conf('openEditors', false)) {
+            return fs.readFileAsync(path, 'utf8').then(text => {
+                let replacements = getReplacements(text);
+                let edits = this.getEdits(path, text, replacements, fromPath);
+                if(edits.length == 0) {
+                    return Promise.resolve();
+                }
+
+                let newText = this.applyEdits(text, edits);
+
+                this.output.show();
+                this.output.appendLine(path);
+
+                return fs.writeFileAsync(path, newText, 'utf-8');
+            });
+        } else {
+            function attemptEdit(edit: vscode.WorkspaceEdit, attempts: number = 0): Thenable<any> {
+                return vscode.workspace.applyEdit(edit).then(success => {
+                    if(!success && attempts < 5) {
+                        console.log(attempts);
+                        return attemptEdit(edit, attempts + 1);
+                    }
+                });
             }
 
-            let newText = this.applyEdits(text, edits);
+            return vscode.workspace.openTextDocument(path).then((doc:vscode.TextDocument):Thenable<any> => {
+                let text = doc.getText();
+                let replacements = getReplacements(text);
 
-            this.output.show();
-            this.output.appendLine(path);
-
-            return fs.writeFileAsync(path, newText, 'utf-8');
-        });
-
-        // return vscode.workspace.openTextDocument(path).then((doc:vscode.TextDocument):Thenable<any> => {
-        //     let text = doc.getText();
-        //     let replacements = getReplacements(text);
-
-        //     let edits = this.getEdits(path, text, replacements).map((edit:Edit) => {
-        //         return vscode.TextEdit.replace(new vscode.Range(doc.positionAt(edit.start), doc.positionAt(edit.end)), edit.replacement);
-        //     });
-        //     if (edits.length > 0) {
-        //         let edit = new vscode.WorkspaceEdit();
-        //         edit.set(doc.uri, edits);
-        //         return vscode.workspace.applyEdit(edit);
-        //     } else {
-        //         return Promise.resolve();
-        //     }
-        // })
+                let edits = this.getEdits(path, text, replacements).map((edit:Edit) => {
+                    return vscode.TextEdit.replace(new vscode.Range(doc.positionAt(edit.start), doc.positionAt(edit.end)), edit.replacement);
+                });
+                if (edits.length > 0) {
+                    this.output.show();
+                    this.output.appendLine(path);
+                    let edit = new vscode.WorkspaceEdit();
+                    edit.set(doc.uri, edits);
+                    return attemptEdit(edit);
+                } else {
+                    return Promise.resolve();
+                }
+            })
+        }
     }
 
     public updateMovedFile(from:string, to:string):Thenable<any> {
@@ -358,6 +387,38 @@ export class ReferenceIndexer {
 
 
                 if(index < files.length) {
+                    setTimeout(next, 0);
+                } else {
+                    resolve();
+                }
+            }
+            next();
+
+        })
+    }
+
+    private processDocuments(documents: vscode.TextDocument[]):Promise<any> {
+        documents = documents.filter((doc) => {
+            return doc.uri.fsPath.indexOf('typings') === -1 &&
+                doc.uri.fsPath.indexOf('node_modules') === -1 &&
+                doc.uri.fsPath.indexOf('jspm_packages') === -1;
+        });
+
+
+        return new Promise(resolve => {
+            let index = 0;
+
+            let next = () => {
+                for(let i=0; i<BATCH_SIZE && index < documents.length; i++) {
+                    let doc = documents[index++];
+                    try {
+                        let data = doc.getText();
+                        this.processFile(data, doc.uri, false);
+                    } catch(e) {
+                        console.log('Failed to load file', e);
+                    }
+                }
+                if(index < documents.length) {
                     setTimeout(next, 0);
                 } else {
                     resolve();

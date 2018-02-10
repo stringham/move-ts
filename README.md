@@ -15,6 +15,10 @@ Moves TypeScript files and folders containing TypeScript and updates their relat
 
 ## Release Notes
 
+## 1.10.0
+
+Added an option to make edits in vscode instead of changing the files on disk. This makes each file changed open in a new tab. To enable set `movets.openEditors` to `true` in User Settings. For large projects sometimes vscode struggles to open all of the files.
+
 ## 1.9.0
 
 Added the ability to resolve relative paths based on the location of `tsconfig.json`. To enable set `movets.relativeToTsconfig` to `true` in User Settings.
