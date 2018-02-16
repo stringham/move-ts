@@ -224,11 +224,11 @@ export class ReferenceIndexer {
     }
 
 
-    private replaceReferences(path:string, getReplacements:(text:string) => Replacement[], fromPath?:string):Thenable<any> {
+    private replaceReferences(filePath:string, getReplacements:(text:string) => Replacement[], fromPath?:string):Thenable<any> {
         if(!this.conf('openEditors', false)) {
-            return fs.readFileAsync(path, 'utf8').then(text => {
+            return fs.readFileAsync(filePath, 'utf8').then(text => {
                 let replacements = getReplacements(text);
-                let edits = this.getEdits(path, text, replacements, fromPath);
+                let edits = this.getEdits(filePath, text, replacements, fromPath);
                 if(edits.length == 0) {
                     return Promise.resolve();
                 }
@@ -236,9 +236,11 @@ export class ReferenceIndexer {
                 let newText = this.applyEdits(text, edits);
 
                 this.output.show();
-                this.output.appendLine(path);
+                this.output.appendLine(filePath);
 
-                return fs.writeFileAsync(path, newText, 'utf-8');
+                return fs.writeFileAsync(filePath, newText, 'utf-8').then(() => {
+                    this.processFile(newText, filePath, true);
+                });
             });
         } else {
             function attemptEdit(edit: vscode.WorkspaceEdit, attempts: number = 0): Thenable<any> {
@@ -250,19 +252,23 @@ export class ReferenceIndexer {
                 });
             }
 
-            return vscode.workspace.openTextDocument(path).then((doc:vscode.TextDocument):Thenable<any> => {
+            return vscode.workspace.openTextDocument(filePath).then((doc:vscode.TextDocument):Thenable<any> => {
                 let text = doc.getText();
                 let replacements = getReplacements(text);
 
-                let edits = this.getEdits(path, text, replacements).map((edit:Edit) => {
+                let rawEdits = this.getEdits(filePath, text, replacements);
+                let edits = rawEdits.map((edit:Edit) => {
                     return vscode.TextEdit.replace(new vscode.Range(doc.positionAt(edit.start), doc.positionAt(edit.end)), edit.replacement);
                 });
                 if (edits.length > 0) {
                     this.output.show();
-                    this.output.appendLine(path);
+                    this.output.appendLine(filePath);
                     let edit = new vscode.WorkspaceEdit();
                     edit.set(doc.uri, edits);
-                    return attemptEdit(edit);
+                    return attemptEdit(edit).then(() => {
+                        let newText = this.applyEdits(text, rawEdits);
+                        this.processFile(newText, filePath, true);
+                    });
                 } else {
                     return Promise.resolve();
                 }
@@ -280,14 +286,20 @@ export class ReferenceIndexer {
                 return [reference, newReference]
             });
             return replacements;
-        }, from)
+        }, from).then(() => {
+            this.index.deleteByPath(from);
+        })
     }
 
-    public updateMovedDir(from:string, to:string):Thenable<any> {
+    public updateMovedDir(from:string, to:string, fileNames:string[] = []):Thenable<any> {
         let relative = vscode.workspace.asRelativePath(to);
         let glob = this.filesToScanGlob;
+        const whiteList = new Set<string>(fileNames);
         return vscode.workspace.findFiles(relative + '/**',undefined,100000).then(files => {
             let promises = files.filter(file => {
+                if(whiteList.size > 0) {
+                    return minimatch(file.fsPath, glob) && whiteList.has(path.relative(to, file.fsPath).split('/')[0]);
+                }
                 return minimatch(file.fsPath, glob);
             }).map(file => {
                 let originalPath = path.resolve(from, path.relative(to,file.fsPath));
@@ -295,6 +307,18 @@ export class ReferenceIndexer {
                     let references = this.getRelativeImportSpecifiers(text, file.fsPath);
                     let change = references.filter(p => {
                         let abs = this.resolveRelativeReference(originalPath, p);
+                        if(whiteList.size > 0) {
+                            const name = path.relative(from, abs).split('/')[0];
+                            if(whiteList.has(name)) {
+                                return false;
+                            }
+                            for(let i=0; i<this.extensions.length; i++) {
+                                if(whiteList.has(name + this.extensions[i])) {
+                                    return false;
+                                }
+                            }
+                            return true;
+                        }
                         return isPathToAnotherDir(path.relative(from, abs));
                     }).map((p):Replacement => {
                         let abs = this.resolveRelativeReference(originalPath, p);
@@ -302,20 +326,32 @@ export class ReferenceIndexer {
                         return [p, relative];
                     });
                     return change;
-                }, originalPath)
+                }, originalPath);
             });
             return Promise.all(promises);
         })
     }
 
-    public updateDirImports(from:string, to:string):Thenable<any> {
-
-        let affectedFiles = this.index.getDirReferences(from);
+    public updateDirImports(from:string, to:string, fileNames:string[] = []):Thenable<any> {
+        const whiteList = new Set(fileNames);
+        let affectedFiles = this.index.getDirReferences(from, fileNames);
         let promises = affectedFiles.map(reference => {
             return this.replaceReferences(reference.path, (text:string):Replacement[] => {
                 let imports = this.getRelativeImportSpecifiers(text, reference.path);
                 let change = imports.filter(p => {
                     let abs = this.resolveRelativeReference(reference.path, p);
+                    if(fileNames.length > 0) {
+                        const name = path.relative(from, abs).split('/')[0];
+                        if(whiteList.has(name)) {
+                            return true;
+                        }
+                        for(let i=0; i<this.extensions.length; i++) {
+                            if(whiteList.has(name + this.extensions[i])) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
                     return !isPathToAnotherDir(path.relative(from, abs));
                 }).map((p):[string,string] => {
                     let abs = this.resolveRelativeReference(reference.path, p);
@@ -375,7 +411,7 @@ export class ReferenceIndexer {
                     let file = files[index++];
                     try {
                         let data = fs.readFileSync(file.fsPath, 'utf8');
-                        this.processFile(data, file, deleteByFile);
+                        this.processFile(data, file.fsPath, deleteByFile);
                     } catch(e) {
                         console.log('Failed to load file', e);
                     }
@@ -413,7 +449,7 @@ export class ReferenceIndexer {
                     let doc = documents[index++];
                     try {
                         let data = doc.getText();
-                        this.processFile(data, doc.uri, false);
+                        this.processFile(data, doc.uri.fsPath, false);
                     } catch(e) {
                         console.log('Failed to load file', e);
                     }
@@ -597,25 +633,25 @@ export class ReferenceIndexer {
         return imports.filter(i => references.has(i.specifier));
     }
 
-    private processFile(data:string, file:vscode.Uri, deleteByFile:boolean = false) {
+    private processFile(data:string, filePath:string, deleteByFile:boolean = false) {
         if(deleteByFile) {
-            this.index.deleteByPath(file.fsPath);
+            this.index.deleteByPath(filePath);
         }
-        let fsPath = file.fsPath.replace(/[\/\\]/g, "/");
+        let fsPath = filePath.replace(/[\/\\]/g, "/");
 
         fsPath = this.removeExtension(fsPath);
 
         let references = this.getRelativeImportSpecifiers(data, fsPath);
 
         for(let i=0; i<references.length; i++) {
-            let referenced = this.resolveRelativeReference(file.fsPath, references[i]);
+            let referenced = this.resolveRelativeReference(filePath, references[i]);
             for(let j=0; j<this.extensions.length; j++) {
                 let ext = this.extensions[j];
                 if(!referenced.endsWith(ext) && fs.existsSync(referenced+ext)) {
                     referenced += ext;
                 }
             }
-            this.index.addReference(referenced, file.fsPath);
+            this.index.addReference(referenced, filePath);
         }
 
     }

@@ -5,24 +5,29 @@ import * as fs from 'fs';
 import {FileItem} from './fileitem';
 import {ReferenceIndexer, isInDir} from './index/referenceindexer';
 
+function doMove(importer: ReferenceIndexer, item: FileItem): Thenable<any> {
+    let preMove: Thenable<any> = vscode.workspace.saveAll(false);
+    return preMove.then(() => {
+        importer.startNewMove(item.sourcePath, item.targetPath);
+        let move = item.move(importer)
+        move.catch(e => {
+            console.log('error in extension.ts', e);
+        })
+        if (!item.isDir) {
+            return move.then(item => {
+                return Promise.resolve(vscode.workspace.openTextDocument(item.targetPath))
+                    .then((textDocument: vscode.TextDocument) => vscode.window.showTextDocument(textDocument));
+            }).catch(e => {
+                console.log('error in extension.ts', e);
+            });
+        }
+        return move;
+    });
+}
+
 function warnThenMove(importer:ReferenceIndexer, item:FileItem):Thenable<any> {
     let doIt = () => {
-        let preMove: Thenable<any> = importer.conf('openEditors', false) ? Promise.resolve() : vscode.workspace.saveAll(false);
-        return preMove.then(() => {
-            importer.startNewMove(item.sourcePath, item.targetPath);
-            let move = item.move(importer)
-            move.catch(e => {
-                console.log('error in extension.ts', e);
-            })
-            if (!item.isDir) {
-                move.then(item => {
-                    return Promise.resolve(vscode.workspace.openTextDocument(item.targetPath))
-                        .then((textDocument: vscode.TextDocument) => vscode.window.showTextDocument(textDocument));
-                }).catch(e => {
-                    console.log('error in extension.ts', e);
-                });
-            }
-        });
+        return doMove(importer, item);
     }
     if(importer.conf('skipWarning', false) || importer.conf('openEditors', false)) {
         return doIt()
@@ -58,6 +63,50 @@ function move(importer:ReferenceIndexer, fsPath:string) {
     })
 }
 
+function moveMultiple(importer: ReferenceIndexer, paths: string[]): Thenable<any> {
+    const dir = path.dirname(paths[0]);
+    if(!paths.every(p => path.dirname(p) == dir)) {
+        return Promise.resolve();
+    }
+
+    return vscode.window.showInputBox({
+        prompt: 'Which directory would you like to move these to?',
+        value: dir
+    }).then((value):any => {
+        if(!value || path.extname(value) != '') {
+            vscode.window.showErrorMessage('Must be moving to a directory');
+            return;
+        }
+        const newLocations = paths.map(p => {
+            const newLocation = path.resolve(value, path.basename(p));
+            return new FileItem(p, newLocation, fs.statSync(p).isDirectory());
+        });
+
+        if(newLocations.some(l => l.exists())) {
+            vscode.window.showErrorMessage('Not allowed to overwrite existing files');
+            return;
+        }
+
+        if(newLocations.some(l => l.isDir && isInDir(l.sourcePath, l.targetPath))) {
+            vscode.window.showErrorMessage('Cannot move a folder within itself');
+            return;
+        }
+
+        let preMove: Thenable<any> = vscode.workspace.saveAll(false);
+        return preMove.then(() => {
+            newLocations.forEach(item => {
+                importer.startNewMove(item.sourcePath, item.targetPath);
+            });
+            let move = FileItem.moveMultiple(newLocations, importer);
+            move.catch(e => {
+                console.log('error in extension.ts', e);
+            });
+            return move;
+        });
+
+    });
+}
+
 function getCurrentPath():string {
     let activeEditor = vscode.window.activeTextEditor;
     let document = activeEditor && activeEditor.document;
@@ -69,7 +118,27 @@ export function activate(context: vscode.ExtensionContext) {
 
     let importer:ReferenceIndexer = new ReferenceIndexer();
 
-    let moveDisposable = vscode.commands.registerCommand('move-ts.move', (uri?:vscode.Uri) => {
+    let initialize = () => {
+        if(importer.isInitialized) {
+            return Promise.resolve();
+        }
+        return vscode.window.withProgress({
+            location: vscode.ProgressLocation.Window,
+            title:'Move-ts indexing',
+        }, async (progress) => {
+            return importer.init(progress)
+        });
+    }
+
+    let moveDisposable = vscode.commands.registerCommand('move-ts.move', (uri?:vscode.Uri, uris?:vscode.Uri[]) => {
+        if(uris && uris.length > 1) {
+            const dir = path.dirname(uris[0].fsPath);
+            if(uris.every(u => path.dirname(u.fsPath) == dir)) {
+                return initialize().then(() => {
+                    return moveMultiple(importer, uris.map(u => u.fsPath));
+                })
+            }
+        }
         let filePath = uri ? uri.fsPath : getCurrentPath();
         if(!filePath){
             filePath = getCurrentPath();
@@ -81,18 +150,7 @@ export function activate(context: vscode.ExtensionContext) {
         let go = () => {
             return move(importer, filePath);
         }
-        if(!importer.isInitialized) {
-            vscode.window.withProgress({
-                location: vscode.ProgressLocation.Window,
-                title:'Move-ts indexing',
-            }, async (progress) => {
-                return importer.init(progress);
-            }).then(() => {
-                go();
-            })
-        } else {
-            return go();
-        }
+        return initialize().then(() => go());
     });
     context.subscriptions.push(moveDisposable);
 

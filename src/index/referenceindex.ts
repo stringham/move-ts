@@ -55,20 +55,35 @@ export class ReferenceIndex {
 
     // get a list of all of the files outside of this directory that reference files
     // inside of this directory.
-    public getDirReferences(directory:string):Reference[] {
+    public getDirReferences(directory:string, fileNames: string[] = []):Reference[] {
         let result:Reference[] = [];
 
-        let added:{[key:string]:boolean} = {};
+        let added = new Set<string>();
+        let whiteList = new Set<string>(fileNames);
 
         for(let p in this.referencedBy) {
-            if(!isPathToAnotherDir(path.relative(directory, p))) {
-                this.referencedBy[p].forEach(reference => {
-                    if(added[reference.path]) return;
-                    if(isPathToAnotherDir(path.relative(directory, reference.path))) {
-                        result.push(reference);
-                        added[reference.path] = true;
-                    }
-                });
+            if(whiteList.size > 0) {
+                const relative = path.relative(directory, p).split('/')[0];
+                if(whiteList.has(relative)) {
+                    this.referencedBy[p].forEach(reference => {
+                        if(added.has(reference.path)) return;
+                        let relative2 = path.relative(directory, reference.path).split('/')[0];
+                        if(!whiteList.has(relative2)) {
+                            result.push(reference);
+                            added.add(reference.path);
+                        }
+                    });
+                }
+            } else {
+                if(!isPathToAnotherDir(path.relative(directory, p))) {
+                    this.referencedBy[p].forEach(reference => {
+                        if(added.has(reference.path)) return;
+                        if(isPathToAnotherDir(path.relative(directory, reference.path))) {
+                            result.push(reference);
+                            added.add(reference.path);
+                        }
+                    });
+                }
             }
         }
         return result;
