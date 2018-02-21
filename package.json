@@ -2,7 +2,7 @@
     "name": "move-ts",
     "displayName": "Move TS - Move TypeScript files and update relative imports",
     "description": "extension for moving typescript files and folders and updating relative imports in your workspace",
-    "version": "1.11.0",
+    "version": "1.11.1",
     "publisher": "stringham",
     "repository": {
         "type": "git",

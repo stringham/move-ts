@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as ts from 'typescript';
 import { walk } from "../walk";
+import { FileItem } from '../fileitem';
 const minimatch = require('minimatch');
 
 const BATCH_SIZE = 50;
@@ -97,6 +98,16 @@ export class ReferenceIndexer {
             return Promise.all(promises);
         });
         return Promise.all([packagePromise, tsConfigPromise]);
+    }
+
+    public startNewMoves(moves:FileItem[]) {
+        this.output.appendLine('--------------------------------------------------');
+        this.output.appendLine(`Moving:`);
+        for(let i=0; i<moves.length; i++) {
+            this.output.appendLine(`           ${moves[i].sourcePath} -> ${moves[i].targetPath}`);
+        }
+        this.output.appendLine('--------------------------------------------------');
+        this.output.appendLine('Files changed:');
     }
 
     public startNewMove(from:string, to:string) {
