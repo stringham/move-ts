@@ -476,16 +476,30 @@ export class ReferenceIndexer {
         })
     }
 
+    private doesFileExist(filePath: string) {
+        if(fs.existsSync(filePath)) {
+            return true;
+        }
+        for(let i=0; i<this.extensions.length; i++) {
+            if(fs.existsSync(filePath + this.extensions[i])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private getRelativePath(from:string, to:string):string {
         let configInfo = this.getTsConfig(from);
         if(configInfo) {
             let config = configInfo.config;
             let configPath = configInfo.configPath;
-            if(config.compilerOptions && config.compilerOptions.paths) {
+            if(config.compilerOptions && config.compilerOptions.paths && config.compilerOptions.baseUrl) {
+                const baseUrl = path.resolve(path.dirname(configPath), config.compilerOptions.baseUrl);
                 for(let p in config.compilerOptions.paths) {
-                    if(config.compilerOptions.paths[p].length == 1) {
-                        let mapped = config.compilerOptions.paths[p][0].slice(0,-1);
-                        let mappedDir = path.resolve(path.dirname(configPath), mapped);
+                    const paths = config.compilerOptions.paths[p];
+                    for(let i=0; i<paths.length; i++) {
+                        const mapped = paths[i].slice(0,-1);
+                        const mappedDir = path.resolve(baseUrl, mapped);
                         if(isInDir(mappedDir, to)) {
                             return p.slice(0,-1) + path.relative(mappedDir, to);
                         }
@@ -525,18 +539,23 @@ export class ReferenceIndexer {
                 let relativeToTsConfig = this.conf('relativeToTsconfig', false);
                 if(relativeToTsConfig && configPath) {
                     let check = path.resolve(path.dirname(configPath), reference);
-                    if(fs.existsSync(check)) {
+                    if(this.doesFileExist(check)) {
                         return check;
                     }
-                    for(let i=0; i<this.extensions.length; i++) {
-                        if(fs.existsSync(check + this.extensions[i])) {
-                            return check;
-                        }
-                    }
                 }
-                if(config.compilerOptions && config.compilerOptions.paths) {
+                if(config.compilerOptions && config.compilerOptions.paths && config.compilerOptions.baseUrl) {
+                    const baseUrl = path.resolve(path.dirname(configPath), config.compilerOptions.baseUrl);
                     for(let p in config.compilerOptions.paths) {
                         if(p.endsWith('*') && reference.startsWith(p.slice(0,-1))) {
+                            const paths = config.compilerOptions.paths[p];
+                            for(let i=0; i<paths.length; i++) {
+                                const mapped = paths[i].slice(0,-1);
+                                const mappedDir = path.resolve(baseUrl, mapped);
+                                const potential = mappedDir + '/' + reference.substr(p.slice(0,-1).length);
+                                if(this.doesFileExist(potential)) {
+                                    return potential;
+                                }
+                            }
                             if(config.compilerOptions.paths[p].length == 1) {
                                 let mapped = config.compilerOptions.paths[p][0].slice(0,-1);
                                 let mappedDir = path.resolve(path.dirname(configPath), mapped);
@@ -609,35 +628,9 @@ export class ReferenceIndexer {
             if(importModule.startsWith('.')) {
                 references.add(importModule);
             } else {
-                let found = false;
-                let configInfo = getConfig();
-                let config = configInfo && configInfo.config;
-                let configPath = configInfo && configInfo.configPath;
-                let relativeToTsConfig = this.conf('relativeToTsconfig', false);
-                if(relativeToTsConfig && configPath) {
-                    let check = path.resolve(path.dirname(configPath), importModule);
-                    for(let i=0; i<this.extensions.length; i++) {
-                        if(fs.existsSync(check + this.extensions[i])) {
-                            references.add(importModule);
-                            found = true;
-                            break;
-                        }
-                    }
-                }
-                if(!found && config && config.compilerOptions && config.compilerOptions.paths) {
-                    for(let p in config.compilerOptions.paths) {
-                        if(p.endsWith('*') && importModule.startsWith(p.slice(0,-1)) && config.compilerOptions.paths[p].length == 1) {
-                            references.add(importModule);
-                            found = true;
-                        }
-                    }
-                }
-                if(!found) {
-                    for(let packageName in this.packageNames) {
-                        if(importModule.startsWith(packageName + '/')) {
-                            references.add(importModule);
-                        }
-                    }
+                const resolved = this.resolveRelativeReference(filePath, importModule);
+                if(resolved.length > 0) {
+                    references.add(importModule);
                 }
             }
         }

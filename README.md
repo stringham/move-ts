@@ -15,6 +15,10 @@ Moves TypeScript files and folders containing TypeScript and updates their relat
 
 ## Release Notes
 
+## 1.11.2
+
+Add support for path mapping when mapping to multiple paths.
+
 ## 1.11.0
 
 Support multi select in the explorer for moving multiple items at the same time. Must be moving all items from the same folder.
