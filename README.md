@@ -15,6 +15,10 @@ Moves TypeScript files and folders containing TypeScript and updates their relat
 
 ## Release Notes
 
+## 1.11.3
+
+Add support for path mapping for Windows users.
+
 ## 1.11.2
 
 Add support for path mapping when mapping to multiple paths.

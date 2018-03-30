@@ -54,7 +54,7 @@ export class FileItem {
                     });
                 }
             })
-            .then(() => {
+            .then((): any => {
                 return this;
             }).catch(e => {
                 console.log('error in move', e);

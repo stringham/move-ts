@@ -27,6 +27,9 @@ export function isInDir(dir:string, p:string) {
     return !isPathToAnotherDir(relative);
 }
 
+export function asUnix(fsPath: string) {
+    return fsPath.replace(/\\/g, '/');
+}
 
 export class ReferenceIndexer {
     changeDocumentEvent: vscode.Disposable;
@@ -309,7 +312,7 @@ export class ReferenceIndexer {
         return vscode.workspace.findFiles(relative + '/**',undefined,100000).then(files => {
             let promises = files.filter(file => {
                 if(whiteList.size > 0) {
-                    return minimatch(file.fsPath, glob) && whiteList.has(path.relative(to, file.fsPath).split('/')[0]);
+                    return minimatch(file.fsPath, glob) && whiteList.has(path.relative(to, file.fsPath).split(path.sep)[0]);
                 }
                 return minimatch(file.fsPath, glob);
             }).map(file => {
@@ -319,7 +322,7 @@ export class ReferenceIndexer {
                     let change = references.filter(p => {
                         let abs = this.resolveRelativeReference(originalPath, p);
                         if(whiteList.size > 0) {
-                            const name = path.relative(from, abs).split('/')[0];
+                            const name = path.relative(from, abs).split(path.sep)[0];
                             if(whiteList.has(name)) {
                                 return false;
                             }
@@ -352,7 +355,7 @@ export class ReferenceIndexer {
                 let change = imports.filter(p => {
                     let abs = this.resolveRelativeReference(reference.path, p);
                     if(fileNames.length > 0) {
-                        const name = path.relative(from, abs).split('/')[0];
+                        const name = path.relative(from, abs).split(path.sep)[0];
                         if(whiteList.has(name)) {
                             return true;
                         }
@@ -501,7 +504,7 @@ export class ReferenceIndexer {
                         const mapped = paths[i].slice(0,-1);
                         const mappedDir = path.resolve(baseUrl, mapped);
                         if(isInDir(mappedDir, to)) {
-                            return p.slice(0,-1) + path.relative(mappedDir, to);
+                            return asUnix(p.slice(0,-1) + path.relative(mappedDir, to));
                         }
                     }
                 }
@@ -510,22 +513,21 @@ export class ReferenceIndexer {
         for(let packageName in this.packageNames) {
             let packagePath = this.packageNames[packageName];
             if(isInDir(packagePath, to) && !isInDir(packagePath, from)) {
-                return packageName + '/' + path.relative(packagePath, to);
+                return asUnix(path.join(packageName, path.relative(packagePath, to)));
             }
         }
         let relativeToTsConfig = this.conf('relativeToTsconfig', false);
         if(relativeToTsConfig && configInfo) {
             let configDir = path.dirname(configInfo.configPath);
             if(isInDir(configDir, from) && isInDir(configDir, to)) {
-                return path.relative(configDir, to);
+                return asUnix(path.relative(configDir, to));
             }
         }
         let relative = path.relative(path.dirname(from), to);
-        relative = relative.replace(/\\/g, "/");
         if(!relative.startsWith('.')) {
             relative = './' + relative;
         }
-        return relative;
+        return asUnix(relative);
     }
 
     private resolveRelativeReference(fsPath:string, reference:string):string {
@@ -551,7 +553,7 @@ export class ReferenceIndexer {
                             for(let i=0; i<paths.length; i++) {
                                 const mapped = paths[i].slice(0,-1);
                                 const mappedDir = path.resolve(baseUrl, mapped);
-                                const potential = mappedDir + '/' + reference.substr(p.slice(0,-1).length);
+                                const potential = path.join(mappedDir, reference.substr(p.slice(0,-1).length));
                                 if(this.doesFileExist(potential)) {
                                     return potential;
                                 }
@@ -559,7 +561,7 @@ export class ReferenceIndexer {
                             if(config.compilerOptions.paths[p].length == 1) {
                                 let mapped = config.compilerOptions.paths[p][0].slice(0,-1);
                                 let mappedDir = path.resolve(path.dirname(configPath), mapped);
-                                return mappedDir + '/' + reference.substr(p.slice(0,-1).length);
+                                return path.join(mappedDir, reference.substr(p.slice(0,-1).length));
                             }
                         }
                     }
@@ -578,7 +580,7 @@ export class ReferenceIndexer {
         let prevDir = filePath;
         let dir = path.dirname(filePath);
         while (dir != prevDir) {
-            let tsConfigPath = dir + '/tsconfig.json';
+            let tsConfigPath = path.join(dir, 'tsconfig.json');
             if (this.tsconfigs.hasOwnProperty(tsConfigPath)) {
                 return {config:this.tsconfigs[tsConfigPath], configPath: tsConfigPath};
             }
@@ -641,9 +643,8 @@ export class ReferenceIndexer {
         if(deleteByFile) {
             this.index.deleteByPath(filePath);
         }
-        let fsPath = filePath.replace(/[\/\\]/g, "/");
 
-        fsPath = this.removeExtension(fsPath);
+        let fsPath = this.removeExtension(filePath);
 
         let references = this.getRelativeImportSpecifiers(data, fsPath);
 

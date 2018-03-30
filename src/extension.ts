@@ -21,7 +21,7 @@ function warn(importer: ReferenceIndexer): Thenable<boolean> {
 function warnThenMove(importer:ReferenceIndexer, item:FileItem):Thenable<any> {
     return warn(importer).then((success: boolean): any => {
         if(success) {
-            return vscode.workspace.saveAll(false).then(() => {
+            return vscode.workspace.saveAll(false).then((): any => {
                 importer.startNewMove(item.sourcePath, item.targetPath);
                 let move = item.move(importer)
                 move.catch(e => {

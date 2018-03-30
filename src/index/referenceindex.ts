@@ -63,11 +63,11 @@ export class ReferenceIndex {
 
         for(let p in this.referencedBy) {
             if(whiteList.size > 0) {
-                const relative = path.relative(directory, p).split('/')[0];
+                const relative = path.relative(directory, p).split(path.sep)[0];
                 if(whiteList.has(relative)) {
                     this.referencedBy[p].forEach(reference => {
                         if(added.has(reference.path)) return;
-                        let relative2 = path.relative(directory, reference.path).split('/')[0];
+                        let relative2 = path.relative(directory, reference.path).split(path.sep)[0];
                         if(!whiteList.has(relative2)) {
                             result.push(reference);
                             added.add(reference.path);
