@@ -93,7 +93,7 @@ export class ReferenceIndexer {
             return Promise.all(promises);
         });
         const tsConfigPromise =
-            vscode.workspace.findFiles('**/tsconfig?(.build).json', '**/node_modules/**', 1000).then(files => {
+            vscode.workspace.findFiles('**/tsconfig{.json,.build.json}', '**/node_modules/**', 1000).then(files => {
                 const promises = files.map(file => {
                     return fs.readFileAsync(file.fsPath, 'utf-8').then(content => {
                         try {
