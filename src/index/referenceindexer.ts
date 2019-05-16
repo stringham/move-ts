@@ -4,7 +4,6 @@ import * as ts from 'typescript';
 import * as vscode from 'vscode';
 
 import {FileItem} from '../fileitem';
-import {walk} from '../walk';
 
 import {isPathToAnotherDir, ReferenceIndex} from './referenceindex';
 
@@ -94,7 +93,7 @@ export class ReferenceIndexer {
             return Promise.all(promises);
         });
         const tsConfigPromise =
-            vscode.workspace.findFiles('**/tsconfig.json', '**/node_modules/**', 1000).then(files => {
+            vscode.workspace.findFiles('**/tsconfig?(.build).json', '**/node_modules/**', 1000).then(files => {
                 const promises = files.map(file => {
                     return fs.readFileAsync(file.fsPath, 'utf-8').then(content => {
                         try {
@@ -602,8 +601,10 @@ export class ReferenceIndexer {
         let prevDir = filePath;
         let dir = path.dirname(filePath);
         while (dir != prevDir) {
-            const tsConfigPath = path.join(dir, 'tsconfig.json');
-            if (this.tsconfigs.hasOwnProperty(tsConfigPath)) {
+            const tsConfigPaths = [path.join(dir, 'tsconfig.json'), path.join(dir, 'tsconfig.build.json')];
+            const tsConfigPath = tsConfigPaths.find(p => this.tsconfigs.hasOwnProperty(p));
+
+            if (tsConfigPath) {
                 return {config: this.tsconfigs[tsConfigPath], configPath: tsConfigPath};
             }
             prevDir = dir;
