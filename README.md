@@ -15,6 +15,10 @@ Moves TypeScript files and folders containing TypeScript and updates their relat
 
 ## Release Notes
 
+## 1.12.0
+
+Added the ability to remove the filename from index file imports. To enable set `movets.removeIndexSuffix` to `true` in User Settings.
+
 ## 1.11.3
 
 Add support for path mapping for Windows users.

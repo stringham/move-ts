@@ -415,6 +415,17 @@ export class ReferenceIndexer {
         return filePath;
     }
 
+    public removeIndexSuffix(filePath: string): string {
+        if (!this.conf('removeIndexSuffix', false)) {
+            return filePath;
+        }
+        const indexSuffix = '/index';
+        if (filePath.endsWith(indexSuffix)) {
+            return filePath.slice(0, -indexSuffix.length);
+        }
+        return filePath;
+    }
+
     public updateImports(from: string, to: string): Promise<any> {
         const affectedFiles = this.index.getReferences(from);
         const promises = affectedFiles.map(filePath => {
@@ -424,6 +435,7 @@ export class ReferenceIndexer {
 
                 let newRelative = this.getRelativePath(filePath.path, to);
                 newRelative = this.removeExtension(newRelative);
+                newRelative = this.removeIndexSuffix(newRelative);
 
                 return [[relative, newRelative]];
             });
