@@ -77,7 +77,7 @@
                 },
                 "movets.removeIndexSuffix": {
                     "type": "boolean",
-                    "default": false,
+                    "default": true,
                     "description": "Removes index filename from imports"
                 }
             }
