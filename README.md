@@ -17,7 +17,7 @@ Moves TypeScript files and folders containing TypeScript and updates their relat
 
 ## 1.12.0
 
-Added the ability to remove the filename from index file imports. To enable set `movets.removeIndexSuffix` to `true` in User Settings.
+Added the ability to remove the filename from index file imports. To disable set `movets.removeIndexSuffix` to `false` in User Settings.
 
 ## 1.11.3
 

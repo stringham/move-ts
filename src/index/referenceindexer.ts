@@ -416,7 +416,7 @@ export class ReferenceIndexer {
     }
 
     public removeIndexSuffix(filePath: string): string {
-        if (!this.conf('removeIndexSuffix', false)) {
+        if (!this.conf('removeIndexSuffix', true)) {
             return filePath;
         }
         const indexSuffix = '/index';
