@@ -675,9 +675,6 @@ export class ReferenceIndexer {
     }
 
     private processFile(data: string, filePath: string, deleteByFile: boolean = false) {
-        if (filePath.indexOf('core/index.ts') > -1) {
-            console.log(filePath)
-        }
         if (deleteByFile) {
             this.index.deleteByPath(filePath);
         }
