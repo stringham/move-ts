@@ -175,21 +175,6 @@ export function activate(context: vscode.ExtensionContext) {
                 }
             });
         }
-
-        // let filePath = uri ? uri.fsPath : getCurrentPath();
-        // if (!filePath) {
-        //     filePath = getCurrentPath();
-        // }
-        // if (!filePath || filePath.length == 0) {
-        //     vscode.window.showErrorMessage(
-        //         'Could not find target to move. Right click in explorer or open a file to move.'
-        //     );
-        //     return;
-        // }
-        // const go = () => {
-        //     return move(importer, filePath);
-        // };
-        // return initialize().then(() => go());
     });
     context.subscriptions.push(moveDisposable);
 
