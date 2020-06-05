@@ -634,8 +634,8 @@ export class ReferenceIndexer {
         const file = ts.createSourceFile(fileName, data, ts.ScriptTarget.Latest);
 
         file.statements.forEach((node: ts.Node) => {
-            if (ts.isImportDeclaration(node)) {
-                if (ts.isStringLiteral(node.moduleSpecifier)) {
+            if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+                if (node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
                     result.push({
                         specifier: node.moduleSpecifier.text,
                         location: {
@@ -675,6 +675,9 @@ export class ReferenceIndexer {
     }
 
     private processFile(data: string, filePath: string, deleteByFile: boolean = false) {
+        if (filePath.indexOf('core/index.ts') > -1) {
+            console.log(filePath)
+        }
         if (deleteByFile) {
             this.index.deleteByPath(filePath);
         }

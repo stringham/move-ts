@@ -69,46 +69,48 @@ function move(importer: ReferenceIndexer, fsPath: string) {
     });
 }
 
-function moveMultiple(importer: ReferenceIndexer, paths: string[]): Thenable<any> {
-    const dir = path.dirname(paths[0]);
-    if (!paths.every(p => path.dirname(p) == dir)) {
-        return Promise.resolve();
+function moveMultiple(importer: ReferenceIndexer, paths: string[], newLocationPaths: string[]): Thenable<any> {
+
+    const newLocations = newLocationPaths.map((newLocationPath, i) => {
+        const p = paths[i]
+        const newLocation = path.resolve(newLocationPath, path.basename(p));
+        return new FileItem(p, newLocation, fs.statSync(p).isDirectory());
+    })
+
+    if (newLocations.some(l => l.exists())) {
+        vscode.window.showErrorMessage('Not allowed to overwrite existing files');
     }
 
-    return vscode.window.showInputBox(
-                            {prompt: 'Which directory would you like to move these to?', value: dir}
-    ).then((value): any => {
-        if (!value || path.extname(value) != '') {
-            vscode.window.showErrorMessage('Must be moving to a directory');
-            return;
-        }
-        const newLocations = paths.map(p => {
-            const newLocation = path.resolve(value, path.basename(p));
-            return new FileItem(p, newLocation, fs.statSync(p).isDirectory());
-        });
+    if (newLocations.some(l => l.isDir && isInDir(l.sourcePath, l.targetPath))) {
+        vscode.window.showErrorMessage('Cannot move a folder within itself');
+    }
 
-        if (newLocations.some(l => l.exists())) {
-            vscode.window.showErrorMessage('Not allowed to overwrite existing files');
-            return;
-        }
+    return warn(importer).then((success: boolean): any => {
+        if (success) {
+            return vscode.workspace.saveAll(false).then(() => {
+                importer.startNewMoves(newLocations);
 
-        if (newLocations.some(l => l.isDir && isInDir(l.sourcePath, l.targetPath))) {
-            vscode.window.showErrorMessage('Cannot move a folder within itself');
-            return;
-        }
+                const moveAll = async () => {
+                    for(let i = 0; i <newLocations.length; i++) {
+                        await newLocations[i].move(importer)
+                        const parsed = path.parse(newLocations[i].targetPath)
+                        const indexPath = `${parsed.dir}/index.ts`
+                        if (!fs.existsSync(indexPath)) {
+                            const code = `export * from './${parsed.name}';\n`
+                            fs.writeFile(indexPath, code, (error) => {
+                                if (error) {
+                                    vscode.window.showErrorMessage(`Could not create ${indexPath}`);
+                                } else {
+                                    console.log(`${indexPath}`)
+                                }
+                            })
+                        }
+                    }
+                }
 
-        return warn(importer).then((success: boolean): any => {
-            if (success) {
-                return vscode.workspace.saveAll(false).then(() => {
-                    importer.startNewMoves(newLocations);
-                    const move = FileItem.moveMultiple(newLocations, importer);
-                    move.catch(e => {
-                        console.log('error in extension.ts', e);
-                    });
-                    return move;
-                });
-            }
-        });
+                return moveAll()
+            });
+        }
     });
 }
 
@@ -142,28 +144,52 @@ export function activate(context: vscode.ExtensionContext) {
     };
 
     const moveDisposable = vscode.commands.registerCommand('move-ts.move', (uri?: vscode.Uri, uris?: vscode.Uri[]) => {
-        if (uris && uris.length > 1) {
-            const dir = path.dirname(uris[0].fsPath);
-            if (uris.every(u => path.dirname(u.fsPath) == dir)) {
-                return initialize().then(() => {
-                    return moveMultiple(importer, uris.map(u => u.fsPath));
-                });
-            }
+        if (uri?.path && vscode.workspace.rootPath) {
+            const workspacePath = uri.path.replace(`${vscode.workspace.rootPath}/`, '')
+            vscode.workspace.findFiles(`${workspacePath}/**/*.tsx`, '**/node_modules/**', 100000).then(files => {
+                console.log(files)
+                const toMoveUris: vscode.Uri[] = []
+                const newLocationPaths: string[] = []
+                files.filter((file) => {
+                    const fileParts = file.path.split('/')
+                    const parsed = path.parse(file.path)
+                    const dirname = path.dirname(file.path)
+                    const dirnameParts = dirname.split('/')
+                    const parentFolder = dirnameParts[dirnameParts.length - 1]
+                    const fileName = parsed.name
+                    const isComponent = fileName[0].toUpperCase() === fileName[0]
+                    
+                    if (parentFolder !== fileName && isComponent) {
+                        toMoveUris.push(file)
+                        newLocationPaths.push(`${dirname}/${fileName}`)
+                    }
+                    console.log(fileName)
+                   console.log(parentFolder)
+                })
+
+                if (toMoveUris && toMoveUris.length > 1) {
+                    const dir = path.dirname(toMoveUris[0].fsPath);
+                        return initialize().then(() => {
+                            return moveMultiple(importer, toMoveUris.map(u => u.fsPath), newLocationPaths);
+                        });
+                }
+            });
         }
-        let filePath = uri ? uri.fsPath : getCurrentPath();
-        if (!filePath) {
-            filePath = getCurrentPath();
-        }
-        if (!filePath || filePath.length == 0) {
-            vscode.window.showErrorMessage(
-                'Could not find target to move. Right click in explorer or open a file to move.'
-            );
-            return;
-        }
-        const go = () => {
-            return move(importer, filePath);
-        };
-        return initialize().then(() => go());
+
+        // let filePath = uri ? uri.fsPath : getCurrentPath();
+        // if (!filePath) {
+        //     filePath = getCurrentPath();
+        // }
+        // if (!filePath || filePath.length == 0) {
+        //     vscode.window.showErrorMessage(
+        //         'Could not find target to move. Right click in explorer or open a file to move.'
+        //     );
+        //     return;
+        // }
+        // const go = () => {
+        //     return move(importer, filePath);
+        // };
+        // return initialize().then(() => go());
     });
     context.subscriptions.push(moveDisposable);
 
