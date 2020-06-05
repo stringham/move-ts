@@ -91,7 +91,8 @@ function moveMultiple(importer: ReferenceIndexer, paths: string[], newLocationPa
                 importer.startNewMoves(newLocations);
 
                 const moveAll = async () => {
-                    for(let i = 0; i <newLocations.length; i++) {
+                    for(let i = 0; i < newLocations.length; i++) {
+                        // Handle one at a time to prevent conflicts.
                         await newLocations[i].move(importer)
                         const parsed = path.parse(newLocations[i].targetPath)
                         const indexPath = `${parsed.dir}/index.ts`
