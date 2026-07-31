@@ -6,4 +6,31 @@ src/**
 **/*.map
 .gitignore
 tsconfig.json
+package-lock.json
 vsc-extension-quickstart.md
+
+# Type declarations are compile-time only.
+node_modules/@types/**
+**/*.d.ts
+
+# The extension only requires typescript's parser (createSourceFile,
+# parseConfigFileTextToJson, isImportDeclaration, isStringLiteral), which all
+# live in lib/typescript.js. Everything below is never loaded at runtime.
+node_modules/typescript/lib/tsc.js
+node_modules/typescript/lib/tsserver.js
+node_modules/typescript/lib/tsserverlibrary.js
+node_modules/typescript/lib/typescriptServices.js
+node_modules/typescript/lib/typingsInstaller.js
+node_modules/typescript/lib/cancellationToken.js
+node_modules/typescript/lib/watchGuard.js
+node_modules/typescript/lib/typesMap.json
+node_modules/typescript/lib/diagnosticMessages.generated.json
+node_modules/typescript/lib/{cs,de,es,fr,it,ja,ko,pl,pt-br,ru,tr,zh-cn,zh-tw}/**
+node_modules/typescript/loc/**
+node_modules/typescript/bin/**
+
+# vsce rewrites README's relative image paths to absolute github raw URLs, so
+# the marketplace never reads these from the package.
+images/**
+
+node_modules/bluebird/js/browser/**
