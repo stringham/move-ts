@@ -2,7 +2,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import {FileItem} from './fileitem';
+import {FileItem, MoveError} from './fileitem';
 import {ReferenceIndexer, isInDir} from './index/referenceindexer';
 
 function warn(importer: ReferenceIndexer): Thenable<boolean> {
@@ -23,25 +23,35 @@ function warn(importer: ReferenceIndexer): Thenable<boolean> {
         });
 }
 
+function describeError(error: any): string {
+    return (error && error.message) || String(error);
+}
+
+function reportFailure(error: any): never {
+    console.log('error in extension.ts', error);
+    const failure = (error || {}) as MoveError;
+    if (failure.rollbackError) {
+        vscode.window.showErrorMessage(
+            'Move failed and could not be fully rolled back: ' + describeError(error) + ' ' +
+            describeError(failure.rollbackError)
+        );
+    } else if (failure.rolledBack) {
+        vscode.window.showErrorMessage('Move failed and was rolled back: ' + describeError(error));
+    } else {
+        vscode.window.showErrorMessage('Move failed: ' + describeError(error));
+    }
+    throw error;
+}
+
 function warnThenMove(importer: ReferenceIndexer, item: FileItem): Thenable<any> {
     return warn(importer).then((success: boolean): any => {
         if (success) {
             return vscode.workspace.saveAll(false).then((): any => {
                 importer.startNewMove(item.sourcePath, item.targetPath);
-                const move = item.move(importer);
-                move.catch(e => {
-                    console.log('error in extension.ts', e);
-                });
+                const move = item.move(importer).catch(reportFailure);
                 if (!item.isDir) {
-                    return move
-                        .then(item => {
-                            return Promise.resolve(
-                                              vscode.workspace.openTextDocument(item.targetPath)
-                            ).then((textDocument: vscode.TextDocument) => vscode.window.showTextDocument(textDocument));
-                        })
-                        .catch(e => {
-                            console.log('error in extension.ts', e);
-                        });
+                    return move.then(moved => vscode.workspace.openTextDocument(moved.targetPath))
+                        .then((textDocument: vscode.TextDocument) => vscode.window.showTextDocument(textDocument));
                 }
                 return move;
             });
@@ -101,11 +111,7 @@ function moveMultiple(importer: ReferenceIndexer, paths: string[]): Thenable<any
             if (success) {
                 return vscode.workspace.saveAll(false).then(() => {
                     importer.startNewMoves(newLocations);
-                    const move = FileItem.moveMultiple(newLocations, importer);
-                    move.catch(e => {
-                        console.log('error in extension.ts', e);
-                    });
-                    return move;
+                    return FileItem.moveMultiple(newLocations, importer).catch(reportFailure);
                 });
             }
         });

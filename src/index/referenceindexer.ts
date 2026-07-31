@@ -4,6 +4,7 @@ import * as ts from 'typescript';
 import * as vscode from 'vscode';
 
 import {FileItem} from '../fileitem';
+import {MoveTransaction, settleAll} from '../movetransaction';
 
 import {isPathToAnotherDir, ReferenceIndex} from './referenceindex';
 
@@ -135,7 +136,7 @@ export class ReferenceIndexer {
         return filesToScan.length == 1 ? filesToScan[0] : `{${filesToScan.join(',')}}`;
     }
 
-    private scanAll(progress?: vscode.Progress<{message: string}>) {
+    public scanAll(progress?: vscode.Progress<{message: string}>) {
         this.index = new ReferenceIndex();
         const start = Date.now();
         return vscode.workspace.findFiles(this.filesToScanGlob, '**/node_modules/**', 100000)
@@ -244,8 +245,10 @@ export class ReferenceIndexer {
         return text;
     }
 
-    private replaceReferences(filePath: string, getReplacements: (text: string) => Replacement[], fromPath?: string):
-        Thenable<any> {
+    private replaceReferences(
+        filePath: string, getReplacements: (text: string) => Replacement[], transaction: MoveTransaction,
+        fromPath?: string
+    ): Thenable<any> {
         if (!this.conf('openEditors', false)) {
             return fs.readFileAsync(filePath, 'utf8').then(text => {
                 const replacements = getReplacements(text);
@@ -259,6 +262,7 @@ export class ReferenceIndexer {
                 this.output.show();
                 this.output.appendLine(filePath);
 
+                transaction.recordOriginal(filePath, text);
                 return fs.writeFileAsync(filePath, newText, 'utf-8').then(() => {
                     this.processFile(newText, filePath, true);
                 });
@@ -270,6 +274,9 @@ export class ReferenceIndexer {
                         console.log(attempts);
                         return attemptEdit(edit, attempts + 1);
                     }
+                    if (!success) {
+                        return Promise.reject(new Error('VS Code rejected the import update.'));
+                    }
                 });
             }
 
@@ -278,28 +285,40 @@ export class ReferenceIndexer {
                 const replacements = getReplacements(text);
 
                 const rawEdits = this.getEdits(filePath, text, replacements);
-                const edits = rawEdits.map((edit: Edit) => {
-                    return vscode.TextEdit.replace(
-                        new vscode.Range(doc.positionAt(edit.start), doc.positionAt(edit.end)), edit.replacement
-                    );
-                });
-                if (edits.length > 0) {
-                    this.output.show();
-                    this.output.appendLine(filePath);
-                    const edit = new vscode.WorkspaceEdit();
-                    edit.set(doc.uri, edits);
-                    return attemptEdit(edit).then(() => {
-                        const newText = this.applyEdits(text, rawEdits);
-                        this.processFile(newText, filePath, true);
-                    });
-                } else {
+                if (rawEdits.length == 0) {
                     return Promise.resolve();
                 }
+
+                this.output.show();
+                this.output.appendLine(filePath);
+                const edit = new vscode.WorkspaceEdit();
+                edit.set(doc.uri, rawEdits.map((rawEdit: Edit) => {
+                    return vscode.TextEdit.replace(
+                        new vscode.Range(doc.positionAt(rawEdit.start), doc.positionAt(rawEdit.end)),
+                        rawEdit.replacement
+                    );
+                }));
+                return attemptEdit(edit).then(() => {
+                    transaction.recordRestore(filePath, () => this.restoreDocument(doc, text));
+                    const newText = this.applyEdits(text, rawEdits);
+                    this.processFile(newText, filePath, true);
+                });
             });
         }
     }
 
-    public updateMovedFile(from: string, to: string): Thenable<any> {
+    private restoreDocument(doc: vscode.TextDocument, text: string): Thenable<any> {
+        const restore = new vscode.WorkspaceEdit();
+        const end = doc.positionAt(doc.getText().length);
+        restore.replace(doc.uri, new vscode.Range(new vscode.Position(0, 0), end), text);
+        return vscode.workspace.applyEdit(restore).then(success => {
+            if (!success) {
+                throw new Error('VS Code rejected rollback of ' + doc.fileName);
+            }
+        });
+    }
+
+    public updateMovedFile(from: string, to: string, transaction: MoveTransaction): Thenable<any> {
         return this
             .replaceReferences(
                 to,
@@ -314,6 +333,7 @@ export class ReferenceIndexer {
                         });
                         return replacements;
                     },
+                transaction,
                 from
             )
             .then(() => {
@@ -321,7 +341,8 @@ export class ReferenceIndexer {
             });
     }
 
-    public updateMovedDir(from: string, to: string, fileNames: string[] = []): Thenable<any> {
+    public updateMovedDir(from: string, to: string, transaction: MoveTransaction, fileNames: string[] = []):
+        Thenable<any> {
         const relative = vscode.workspace.asRelativePath(to);
         const glob = this.filesToScanGlob;
         const whiteList = new Set<string>(fileNames);
@@ -362,13 +383,14 @@ export class ReferenceIndexer {
                                                      return [p, relative];
                                                  });
                                          return change;
-                                     }, originalPath);
+                                     }, transaction, originalPath);
                                  });
-            return Promise.all(promises);
+            return settleAll(promises);
         });
     }
 
-    public updateDirImports(from: string, to: string, fileNames: string[] = []): Thenable<any> {
+    public updateDirImports(from: string, to: string, transaction: MoveTransaction, fileNames: string[] = []):
+        Thenable<any> {
         const whiteList = new Set(fileNames);
         const affectedFiles = this.index.getDirReferences(from, fileNames);
         const promises = affectedFiles.map(reference => {
@@ -399,9 +421,9 @@ export class ReferenceIndexer {
                                        return [p, changeTo];
                                    });
                 return change;
-            });
+            }, transaction);
         });
-        return Promise.all(promises);
+        return settleAll(promises);
     }
 
     public removeExtension(filePath: string): string {
@@ -426,7 +448,7 @@ export class ReferenceIndexer {
         return filePath;
     }
 
-    public updateImports(from: string, to: string): Promise<any> {
+    public updateImports(from: string, to: string, transaction: MoveTransaction): Promise<any> {
         const affectedFiles = this.index.getReferences(from);
         const promises = affectedFiles.map(filePath => {
             return this.replaceReferences(filePath.path, (text: string): Replacement[] => {
@@ -438,11 +460,9 @@ export class ReferenceIndexer {
                 newRelative = this.removeIndexSuffix(newRelative);
 
                 return [[relative, newRelative]];
-            });
+            }, transaction);
         });
-        return Promise.all(promises).catch(e => {
-            console.log(e);
-        });
+        return settleAll(promises);
     }
 
     private processWorkspaceFiles(files: vscode.Uri[], deleteByFile: boolean = false, progress?: vscode.Progress<{

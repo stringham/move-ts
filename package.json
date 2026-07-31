@@ -87,10 +87,12 @@
         "vscode:prepublish": "tsc -p ./",
         "compile": "tsc -watch -p ./",
         "postinstall": "node ./node_modules/vscode/bin/install",
-        "test": "node ./node_modules/vscode/bin/test"
+        "test": "node ./node_modules/vscode/bin/test",
+        "test:unit": "tsc -p ./ && mocha \"out/test/**/*.test.js\""
     },
     "dependencies": {
         "typescript": "^3.7.5",
+        "bluebird": "3.7.2",
         "fs-extra-promise": "1.0.1",
         "@types/fs-extra-promise": "1.0.8",
         "minimatch": "3.0.4"
@@ -100,6 +102,7 @@
         "mocha": "^7.0.1",
         "@types/node": "13.7.0",
         "@types/minimatch": "3.0.3",
-        "@types/mocha": "^7.0.1"
+        "@types/mocha": "^7.0.1",
+        "@types/bluebird": "3.5.28"
     }
 }
